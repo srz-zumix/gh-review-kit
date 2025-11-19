@@ -8,6 +8,9 @@
 *.so
 *.dylib
 
+# Built binary
+gh-review-kit
+
 # Test binary, built with `go test -c`
 *.test
 
@@ -23,10 +26,15 @@ profile.cov
 # Go workspace file
 go.work
 go.work.sum
+# go.work paths
+go-gh-extension
 
 # env file
 .env
 
 # Editor/IDE
 # .idea/
-# .vscode/
+.vscode/
+
+# temp
+[Tt]emp/
