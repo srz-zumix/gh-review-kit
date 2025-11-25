@@ -17,6 +17,7 @@ func NewRerequestCmd() *cobra.Command {
 		repo            string
 		reviewers       []string
 		excludeApproved bool
+		expandTeam      bool
 	)
 
 	cmd := &cobra.Command{
@@ -30,7 +31,9 @@ If reviewers are specified, the command will re-request review from the specifie
 Reviewers can be specified as:
   - Individual users: username
   - Team reviewers: org/team-slug
-  - With @ prefix: @username or @org/team-slug`,
+  - With @ prefix: @username or @org/team-slug
+
+When --expand-team is specified, team reviewers will be expanded to individual team members.`,
 		Aliases: []string{"rr"},
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -58,6 +61,16 @@ Reviewers can be specified as:
 			if len(reviewers) > 0 {
 				// Use specified reviewers
 				reviewersRequest = gh.GetRequestedReviewers(reviewers)
+
+				// If expandTeam is set, expand team reviewers to individual members
+				if expandTeam {
+					expanded, err := gh.ExpandTeamReviewers(ctx, client, repository, reviewersRequest)
+					if err != nil {
+						return fmt.Errorf("failed to expand team reviewers: %w", err)
+					}
+					reviewersRequest = expanded
+					logger.Info("Expanded team reviewers to individual members", "count", len(reviewersRequest.Reviewers))
+				}
 
 				// If excludeApproved is set, filter out approved reviewers
 				if excludeApproved {
@@ -132,6 +145,7 @@ Reviewers can be specified as:
 	f.StringVarP(&repo, "repo", "R", "", "Repository in the format 'owner/repo'")
 	f.StringSliceVarP(&reviewers, "reviewers", "r", []string{}, "Reviewers to re-request (users or teams, e.g., username or org/team)")
 	f.BoolVar(&excludeApproved, "exclude-approved", false, "Exclude reviewers who have already approved")
+	f.BoolVar(&expandTeam, "expand-team", false, "Expand team reviewers to individual team members")
 
 	return cmd
 }
