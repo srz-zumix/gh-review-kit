@@ -143,7 +143,7 @@ When --expand-team is specified, team reviewers will be expanded to individual t
 				}
 
 				if len(reviewersRequest.Reviewers) == 0 {
-					return fmt.Errorf("no eligible reviewers found for pull request #%d (all reviewers may be approved)", pr.GetNumber())
+					return fmt.Errorf("no eligible reviewers found for pull request #%d: all reviewers have already approved", pr.GetNumber())
 				}
 
 				logger.Info("Re-requesting review from reviewers who have already reviewed", "pr", pr.GetNumber())
