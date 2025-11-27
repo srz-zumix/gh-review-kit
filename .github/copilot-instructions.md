@@ -46,12 +46,12 @@
     * cmd/member/, cmd/org/, cmd/repo/, cmd/user/ などのサブディレクトリに、各コマンドのサブコマンドを配置
     * サブディレクトリ内にもさらに role/, sets/, sync/ などの細分化されたコマンドを配置する場合がある
   * go-gh-extension/pkg: 共通パッケージ群
-    * actions/: GitHub Actions関連のユーティリティ
-    * cmdflags/: コマンドラインフラグの共通処理
+    * action/: GitHub Actions 関連のビジネスロジック層
+    * cmdflag/: コマンドライン引数の定義・パース
     * gh/: GitHub APIラッパー・ビジネスロジック層。API呼び出しはgh/client/配下で行い、gh/直下はラッパー・ユーティリティ関数のみ
-      * gh/配下のラッパー関数は必ずctx context.Context, g *GitHubClientを先頭引数に取り、repository.Repository型等を利用する
-    * gh/client/: go-github等の外部APIクライアント呼び出し専用。APIレスポンスの整形やエラーラップは行わない
-    * logger/: ロギング関連
+    * gh/client/: go-github等の外部APIクライアント呼び出し、GraphQL 呼び出し専用。API と GraphQL のレスポンス型統一以外の理由でAPIレスポンスの整形は行わない。エラーはそのまま返す
+    * gitutil/: Git 操作関連のユーティリティ関数
+    * ioutil/: 入出力関連のユーティリティ関数（ファイル操作、アーカイブ展開等）
     * parser/: 入力値のパース・バリデーション等
     * render/: 表示用の整形・出力処理（テーブル/JSON/hovercard等）
   * config/: 設定ファイル関連

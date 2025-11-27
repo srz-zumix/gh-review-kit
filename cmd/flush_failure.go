@@ -26,14 +26,16 @@ func NewFlushFailureCmd() *cobra.Command {
 		Short: "Display logs for failed check runs",
 		Long: `Display logs for failed check runs in a pull request.
 
-This command retrieves all check runs with 'failure' conclusion and displays their logs
-using 'gh run view --log' for each failed check run.`,
+This command retrieves all check runs with 'failure' conclusion and displays their logs`,
 		Aliases: []string{"ff", "flush-fail", "flush-failed"},
-		Args:    cobra.ExactArgs(1),
+		Args:    cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			prNumber := args[0]
+			prIdentifier := ""
+			if len(args) > 0 {
+				prIdentifier = args[0]
+			}
 
-			repository, err := parser.Repository(parser.RepositoryInput(repo))
+			repository, err := parser.Repository(parser.RepositoryInput(repo), parser.RepositoryFromURL(prIdentifier))
 			if err != nil {
 				return fmt.Errorf("failed to resolve repository: %w", err)
 			}
@@ -45,9 +47,9 @@ using 'gh run view --log' for each failed check run.`,
 			ctx := context.Background()
 
 			// Get pull request
-			pr, err := gh.GetPullRequest(ctx, client, repository, prNumber)
+			pr, err := gh.FindPRByIdentifier(ctx, client, repository, prIdentifier)
 			if err != nil {
-				return fmt.Errorf("failed to get pull request #%s: %w", prNumber, err)
+				return fmt.Errorf("failed to get pull request %s: %w", prIdentifier, err)
 			}
 
 			// Get check runs for the PR head SHA
@@ -60,7 +62,7 @@ using 'gh run view --log' for each failed check run.`,
 
 			results, err := gh.ListCheckRunsForRefWithGraphQL(ctx, client, repository, pr.GetHead().GetSHA(), pr.GetNumber(), filterOptions)
 			if err != nil {
-				return fmt.Errorf("failed to get check runs for pull request #%s: %w", prNumber, err)
+				return fmt.Errorf("failed to get check runs for pull request #%s: %w", prIdentifier, err)
 			}
 
 			if len(results.CheckRuns) == 0 {
