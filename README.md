@@ -78,7 +78,7 @@ gh review-kit cc 123 --repo owner-name/repo-name
 ### Display logs for failed check runs
 
 ```sh
-gh review-kit flush-failure [pull-request-identifier] [--repo REPO]
+gh review-kit flush-failure [pull-request-identifier] [--repo REPO] [--full] [--required|--not-required]
 ```
 
 Display logs for failed check runs in a pull request.
