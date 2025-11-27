@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
 
 	"github.com/spf13/cobra"
 	"github.com/srz-zumix/go-gh-extension/pkg/gh"
@@ -95,6 +96,24 @@ When --expand-team is specified, team reviewers will be expanded to individual t
 						filteredReviewers = append(filteredReviewers, reviewer)
 					}
 					reviewersRequest.Reviewers = filteredReviewers
+
+					// Filter out approved team reviewers
+					filteredTeamReviewers := []string{}
+					for _, team := range reviewersRequest.TeamReviewers {
+						members, err := gh.ListTeamMembers(ctx, client, repository, team, nil, false)
+						if err != nil {
+							return fmt.Errorf("failed to get members of team '%s': %w", team, err)
+						}
+						memberNames := gh.GetUserNames(members)
+						if slices.ContainsFunc(memberNames, func(s string) bool {
+							return approvedMap[s]
+						}) {
+							logger.Info("Skipping approved team reviewer member", "team", team, "member", memberNames)
+							continue
+						}
+						filteredTeamReviewers = append(filteredTeamReviewers, team)
+					}
+					reviewersRequest.TeamReviewers = filteredTeamReviewers
 
 					if len(reviewersRequest.Reviewers) == 0 && len(reviewersRequest.TeamReviewers) == 0 {
 						return fmt.Errorf("no eligible reviewers found for pull request #%d (all specified reviewers have already approved)", pr.GetNumber())
