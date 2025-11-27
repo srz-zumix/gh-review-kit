@@ -22,9 +22,9 @@ type RunLogWalker struct {
 type TaskStep = github.TaskStep
 type StepLog = actions.StepLog
 
-func NewRunLogWalker(ctx context.Context, client *gh.GitHubClient, repo repository.Repository, context any) *RunLogWalker {
+func NewRunLogWalker(ctx context.Context, client *gh.GitHubClient, repo repository.Repository, object any) *RunLogWalker {
 	return &RunLogWalker{
-		logFetcher: gh.GetWorkflowRunLogUrlFetcher(context),
+		logFetcher: gh.GetWorkflowRunLogUrlFetcher(object),
 		ctx:        ctx,
 		client:     client,
 		repo:       repo,
