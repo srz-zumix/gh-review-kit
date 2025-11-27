@@ -26,7 +26,7 @@ func NewFlushFailureCmd() *cobra.Command {
 		Short: "Display logs for failed check runs",
 		Long: `Display logs for failed check runs in a pull request.
 
-This command retrieves all check runs with 'failure' conclusion and displays their logs`,
+This command retrieves all check runs with 'failure' conclusion and displays their logs.`,
 		Aliases: []string{"ff", "flush-fail", "flush-failed"},
 		Args:    cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
