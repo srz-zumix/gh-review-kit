@@ -129,7 +129,7 @@ When --expand-team is specified, team reviewers will be expanded to individual t
 				}
 
 				if len(reviews) == 0 {
-					return fmt.Errorf("no reviews found for pull request #%d, please specify reviewers using --reviewers flag", pr.GetNumber())
+					return fmt.Errorf("no reviews found for pull request #%d; specify reviewers using the --reviewers flag", pr.GetNumber())
 				}
 
 				// Build reviewers list from reviewers who have submitted reviews
