@@ -22,7 +22,7 @@ func NewFlushFailureCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "flush-failure <pull-request-number>",
+		Use:   "flush-failure [pull-request-identifier]",
 		Short: "Display logs for failed check runs",
 		Long: `Display logs for failed check runs in a pull request.
 
