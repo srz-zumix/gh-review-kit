@@ -22,7 +22,7 @@ func NewRerequestCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "rerequest <pull-request-number>",
+		Use:   "rerequest [pull-request-number]",
 		Short: "Re-request review for a pull request",
 		Long: `Re-request review for a pull request.
 
@@ -36,11 +36,14 @@ Reviewers can be specified as:
 
 When --expand-team is specified, team reviewers will be expanded to individual team members.`,
 		Aliases: []string{"rr"},
-		Args:    cobra.ExactArgs(1),
+		Args:    cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			prNumber := args[0]
+			prIdentifier := ""
+			if len(args) > 0 {
+				prIdentifier = args[0]
+			}
 
-			repository, err := parser.Repository(parser.RepositoryInput(repo))
+			repository, err := parser.Repository(parser.RepositoryInput(repo), parser.RepositoryFromURL(prIdentifier))
 			if err != nil {
 				return fmt.Errorf("failed to resolve repository: %w", err)
 			}
@@ -52,9 +55,9 @@ When --expand-team is specified, team reviewers will be expanded to individual t
 			ctx := context.Background()
 
 			// Get pull request
-			pr, err := gh.GetPullRequest(ctx, client, repository, prNumber)
+			pr, err := gh.FindPRByIdentifier(ctx, client, repository, prIdentifier)
 			if err != nil {
-				return fmt.Errorf("failed to get pull request #%s: %w", prNumber, err)
+				return fmt.Errorf("failed to get pull request %s: %w", prIdentifier, err)
 			}
 
 			var reviewersRequest gh.ReviewersRequest
@@ -75,9 +78,9 @@ When --expand-team is specified, team reviewers will be expanded to individual t
 
 				// If excludeApproved is set, filter out approved reviewers
 				if excludeApproved {
-					approvedReviewers, err := gh.GetApprovedReviewers(ctx, client, repository, prNumber)
+					approvedReviewers, err := gh.GetApprovedReviewers(ctx, client, repository, pr)
 					if err != nil {
-						return fmt.Errorf("failed to get approved reviewers for pull request #%s: %w", prNumber, err)
+						return fmt.Errorf("failed to get approved reviewers for pull request #%d: %w", pr.GetNumber(), err)
 					}
 
 					// Create a map for fast lookup
@@ -105,6 +108,7 @@ When --expand-team is specified, team reviewers will be expanded to individual t
 							return fmt.Errorf("failed to get members of team '%s': %w", team, err)
 						}
 						memberNames := gh.GetUserNames(members)
+						// team is approved if any member is approved
 						if slices.ContainsFunc(memberNames, func(s string) bool {
 							return approvedMap[s]
 						}) {
@@ -123,9 +127,9 @@ When --expand-team is specified, team reviewers will be expanded to individual t
 				logger.Info("Re-requesting review from specified reviewers", "pr", pr.GetNumber())
 			} else {
 				// Get reviewers who have already submitted reviews
-				reviews, err := gh.GetPullRequestLatestReviews(ctx, client, repository, prNumber)
+				reviews, err := gh.GetPullRequestLatestReviews(ctx, client, repository, pr)
 				if err != nil {
-					return fmt.Errorf("failed to get reviews for pull request #%s: %w", prNumber, err)
+					return fmt.Errorf("failed to get reviews for pull request #%d: %w", pr.GetNumber(), err)
 				}
 
 				if len(reviews) == 0 {
@@ -150,9 +154,9 @@ When --expand-team is specified, team reviewers will be expanded to individual t
 			}
 
 			// Request reviewers
-			_, err = gh.RequestPullRequestReviewers(ctx, client, repository, prNumber, reviewersRequest)
+			_, err = gh.RequestPullRequestReviewers(ctx, client, repository, pr, reviewersRequest)
 			if err != nil {
-				return fmt.Errorf("failed to re-request review for pull request #%s: %w", prNumber, err)
+				return fmt.Errorf("failed to re-request review for pull request #%d: %w", pr.GetNumber(), err)
 			}
 
 			fmt.Fprintf(os.Stdout, "Successfully re-requested review for pull request #%d\n", pr.GetNumber())
