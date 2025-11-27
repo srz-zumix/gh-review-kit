@@ -101,13 +101,13 @@ This command retrieves all check runs with 'failure' conclusion and displays the
 						continue
 					}
 
-					walkier := checks.NewRunLogWalker(ctx, client, repository, workflowJob)
-					if err := walkier.Fetch(3); err != nil {
+					walker := checks.NewRunLogWalker(ctx, client, repository, workflowJob)
+					if err := walker.Fetch(3); err != nil {
 						logger.Warn("Failed to fetch logs for workflow job", "job_id", workflowJob.GetID(), "error", err)
 						continue
 					}
 
-					err = walkier.Walk(*workflowJob, func(step *checks.TaskStep, stepLog *checks.StepLog) error {
+					err = walker.Walk(*workflowJob, func(step *checks.TaskStep, stepLog *checks.StepLog) error {
 						if step.GetConclusion() == gh.ChecksRunConclusionFailure {
 							content, err := stepLog.ReadContent()
 							if err != nil {
