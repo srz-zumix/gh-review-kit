@@ -13,7 +13,7 @@ gh extension install srz-zumix/gh-review-kit
 ### List check runs for a pull request
 
 ```sh
-gh review-kit checks [pull-request-identifier] [--repo REPO] [--status STATUS] [--conclusion CONCLUSION] [--headers HEADERS] [--all] [--required|--not-required] [--details] [--color COLOR]
+gh review-kit checks [pull-request-identifier] [--repo REPO] [--status STATUS] [--conclusion CONCLUSION] [--headers HEADERS] [--all] [--required|--no-required] [--details] [--color COLOR]
 ```
 
 List check runs for a pull request.
@@ -36,7 +36,7 @@ The pull request can be specified by:
 - `--conclusion, -c`: Filter by conclusion: success, failure, neutral, cancelled, skipped, timed_out, action_required (optional)
 - `--details, -d`: Show detailed information (status icon, run ID, job ID, timestamps, URLs) (optional, default: false)
 - `--headers, -H`: Columns to display (NAME, STATUS, CONCLUSION, RUN_ID, JOB_ID, STARTED_AT, ELAPSED, DETAILS_URL, etc.) (optional)
-- `--not-required`: Show only non-required check runs (optional)
+- `--no-required`: Show only non-required check runs (optional)
 - `--repo, -R`: Repository in the format 'owner/repo' (optional, defaults to current repository)
 - `--required`: Show only required check runs (optional)
 - `--status, -s`: Filter by status: queued, in_progress, completed (optional)
@@ -78,7 +78,7 @@ gh review-kit cc 123 --repo owner-name/repo-name
 ### Display logs for failed check runs
 
 ```sh
-gh review-kit flush-failure [pull-request-identifier] [--repo REPO] [--full] [--required|--not-required]
+gh review-kit flush-failure [pull-request-identifier] [--repo REPO] [--full] [--required|--no-required]
 ```
 
 Display logs for failed check runs in a pull request.
