@@ -95,7 +95,10 @@ The pull request can be specified by:
 
 **Options:**
 
+- `--full`: Display full logs instead of only failed step logs (optional, default: false)
+- `--no-required`: Show only non-required check runs (optional)
 - `--repo, -R`: Repository in the format 'owner/repo' (optional, defaults to current repository)
+- `--required`: Show only required check runs (optional)
 
 **Examples:**
 
@@ -111,6 +114,15 @@ gh review-kit ff https://github.com/owner/repo/pull/123
 
 # Display logs by branch name
 gh review-kit ff feature/my-branch
+
+# Display full logs for failed check runs
+gh review-kit ff 123 --full
+
+# Display logs for only required failed check runs
+gh review-kit ff 123 --required
+
+# Display logs for only non-required failed check runs
+gh review-kit ff 123 --no-required
 
 # Display logs for failed check runs in a different repository
 gh review-kit ff 123 --repo owner-name/repo-name
