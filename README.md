@@ -8,6 +8,20 @@ A tool to manage GitHub reviews.
 gh extension install srz-zumix/gh-review-kit
 ```
 
+## Global Options
+
+The following options are available for all commands:
+
+- `--read-only`: Run in read-only mode (prevent write operations). This flag is useful for AI agents or CI/CD environments to ensure no modifications are made to GitHub resources.
+- `--log-level, -L`: Set log level: debug, info, warn, error (optional, default: info)
+
+**Example:**
+
+```sh
+# Run in read-only mode
+gh review-kit rerequest 123 --read-only
+```
+
 ## Commands
 
 ### List check runs for a pull request
@@ -22,6 +36,7 @@ This command is similar to `gh pr checks` but allows filtering by status and con
 You can customize the output columns and filter by required status.
 
 The pull request can be specified by:
+
 - PR number (e.g., `123` or `#123`)
 - PR URL (e.g., `https://github.com/owner/repo/pull/123`)
 - Branch name (e.g., `feature/my-branch`)
@@ -86,6 +101,7 @@ Display logs for failed check runs in a pull request.
 This command retrieves all check runs with 'failure' conclusion and displays their logs.
 
 The pull request can be specified by:
+
 - PR number (e.g., `123` or `#123`)
 - PR URL (e.g., `https://github.com/owner/repo/pull/123`)
 - Branch name (e.g., `feature/my-branch`)
@@ -140,6 +156,7 @@ If reviewers are not specified, the command will re-request review from all revi
 If reviewers are specified, the command will re-request review from the specified reviewers only.
 
 The pull request can be specified by:
+
 - PR number (e.g., `123` or `#123`)
 - PR URL (e.g., `https://github.com/owner/repo/pull/123`)
 - Branch name (e.g., `feature/my-branch`)
