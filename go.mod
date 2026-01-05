@@ -2,7 +2,7 @@ module github.com/srz-zumix/gh-review-kit
 
 go 1.25.4
 
-require github.com/srz-zumix/go-gh-extension v0.2.5
+require github.com/srz-zumix/go-gh-extension v0.2.8
 
 require (
 	dario.cat/mergo v1.0.2 // indirect
@@ -28,7 +28,7 @@ require (
 	github.com/cli/safeexec v1.0.1 // indirect
 	github.com/cli/shurcooL-graphql v0.0.4 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
-	github.com/ddddddO/gtree v1.11.9 // indirect
+	github.com/ddddddO/gtree v1.13.1 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
 	github.com/fatih/color v1.18.0 // indirect
