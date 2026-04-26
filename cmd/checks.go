@@ -93,7 +93,7 @@ You can also output run IDs and job IDs for use with 'gh run view'.`,
 				if details {
 					renderer.RenderCheckRunsDetails(results.CheckRuns)
 				} else {
-					renderer.RenderCheckRunsDefault(results.CheckRuns)
+					renderer.RenderCheckRuns(results.CheckRuns, nil)
 				}
 			} else {
 				renderer.RenderCheckRuns(results.CheckRuns, headers)
