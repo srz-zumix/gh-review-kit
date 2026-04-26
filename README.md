@@ -8,6 +8,24 @@ A tool to manage GitHub reviews.
 gh extension install srz-zumix/gh-review-kit
 ```
 
+## Shell Completion
+
+**Workaround Available!** While gh CLI doesn't natively support extension completion, we provide a patch script that enables it.
+
+**Prerequisites:** Before setting up gh-review-kit completion, ensure gh CLI completion is configured for your shell. See [gh completion documentation](https://cli.github.com/manual/gh_completion) for setup instructions.
+
+For detailed installation instructions and setup for each shell, see the [Shell Completion Guide](https://github.com/srz-zumix/go-gh-extension/blob/main/docs/shell-completion.md).
+
+## Agent Skills
+
+gh-review-kit bundles agent skills for AI. Use the `skills` subcommand to install and manage them.
+
+```sh
+gh review-kit skills [subcommand] [args...]
+```
+
+For details, see [Songmu/skillsmith](https://github.com/Songmu/skillsmith).
+
 ## Global Options
 
 The following options are available for all commands:

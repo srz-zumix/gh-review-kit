@@ -4,10 +4,6 @@ ci:
     - any-glob-to-all-files: '.github/**'
 - color: '#7c0bb2'
 
-labeler:
-- changed-files:
-  - any-glob-to-any-file: 'labeler/**'
-
 documentation:
 - changed-files:
   - any-glob-to-any-file:
