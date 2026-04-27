@@ -31,7 +31,7 @@ func NewListCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "list [pull-request-number]",
+		Use:   "list [pull-request-identifier]",
 		Short: "List check runs for a pull request",
 		Long: `List check runs for a pull request.
 
