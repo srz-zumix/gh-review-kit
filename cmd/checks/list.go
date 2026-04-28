@@ -110,7 +110,7 @@ You can also output run IDs and job IDs for use with 'gh run view'.`,
 	cmdutil.StringEnumFlag(cmd, &conclusion, "conclusion", "c", "", gh.ChecksRunFilterConclusions, "Filter by conclusion")
 	f.StringSliceVarP(&headers, "headers", "H", []string{}, "Columns to display (NAME, STATUS, CONCLUSION, RUN_ID, JOB_ID, etc.)")
 	required.AddNoPrefixFlag(cmd, "required", "Show only required check runs", "Show only non-required check runs")
-	cmdutil.StringEnumFlag(cmd, &colorFlag, "color", "", render.ColorFlagAuto, render.ColorFlags, "Use color in diff output")
+	cmdutil.StringEnumFlag(cmd, &colorFlag, "color", "", render.ColorFlagAuto, render.ColorFlags, "Use color in output")
 	cmdutil.AddFormatFlags(cmd, &opts.Exporter)
 
 	return cmd

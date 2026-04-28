@@ -49,7 +49,10 @@ gh review-kit                       # Root command
 
 ## List Check Runs (checks list)
 
-List check runs for a pull request with advanced filtering by status, conclusion, and required status.
+List check runs for a pull request.
+
+This command is similar to 'gh pr checks' but allows filtering by status.
+You can also output run IDs and job IDs for use with 'gh run view'.
 
 **Aliases:** `ls`, `cc`, `check-checks`
 
@@ -160,7 +163,17 @@ gh review-kit checks ff 123
 
 ## Re-request Review (rerequest)
 
-Re-request review for a pull request. Without specifying reviewers, re-requests from all reviewers who have already submitted a review.
+Re-request review for a pull request.
+
+If reviewers are not specified, the command will re-request review from all reviewers who have already submitted a review.
+If reviewers are specified, the command will re-request review from the specified reviewers only.
+
+Reviewers can be specified as:
+- Individual users: username
+- Team reviewers: org/team-slug
+- With @ prefix: @username or @org/team-slug
+
+When --expand-team is specified, team reviewers will be expanded to individual team members.
 
 **Aliases:** `rr`
 

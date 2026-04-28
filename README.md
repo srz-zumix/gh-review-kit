@@ -52,8 +52,8 @@ gh review-kit checks list [pull-request-identifier] [--repo REPO] [--status STAT
 
 List check runs for a pull request.
 
-This command is similar to `gh pr checks` but allows filtering by status and conclusion.
-You can customize the output columns and filter by required status.
+This command is similar to `gh pr checks` but allows filtering by status.
+You can also output run IDs and job IDs for use with `gh run view`.
 
 The pull request can be specified by:
 
@@ -174,6 +174,14 @@ Re-request review for a pull request.
 
 If reviewers are not specified, the command will re-request review from all reviewers who have already submitted a review.
 If reviewers are specified, the command will re-request review from the specified reviewers only.
+
+Reviewers can be specified as:
+
+- Individual users: `username`
+- Team reviewers: `org/team-slug`
+- With @ prefix: `@username` or `@org/team-slug`
+
+When `--expand-team` is specified, team reviewers will be expanded to individual team members.
 
 The pull request can be specified by:
 
