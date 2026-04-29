@@ -52,8 +52,8 @@ gh review-kit checks list [pull-request-identifier] [--repo REPO] [--status STAT
 
 List check runs for a pull request.
 
-This command is similar to `gh pr checks` but allows filtering by status.
-You can also output run IDs and job IDs for use with `gh run view`.
+This command is similar to `gh pr checks` but also supports filtering by status, conclusion, and required check state.
+It can also control output with options such as `--all`, `--headers`, `--details`, and `--color`, and can show run IDs and job IDs for use with `gh run view`.
 
 The pull request can be specified by:
 
