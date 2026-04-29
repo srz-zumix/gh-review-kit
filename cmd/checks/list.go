@@ -35,8 +35,9 @@ func NewListCmd() *cobra.Command {
 		Short: "List check runs for a pull request",
 		Long: `List check runs for a pull request.
 
-This command is similar to 'gh pr checks' but allows filtering by status.
-You can also output run IDs and job IDs for use with 'gh run view'.`,
+This command is similar to 'gh pr checks' but also supports filtering by status,
+conclusion, and required checks, and can show either the latest check runs or all
+check runs. You can also output run IDs and job IDs for use with 'gh run view'.`,
 		Aliases: []string{"ls", "cc", "check-checks"},
 		Args:    cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
