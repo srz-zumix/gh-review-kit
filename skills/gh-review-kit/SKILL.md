@@ -51,7 +51,7 @@ gh review-kit                       # Root command
 
 List check runs for a pull request.
 
-This command is similar to 'gh pr checks' but allows filtering by status.
+This command is similar to 'gh pr checks' but allows filtering by status and conclusion.
 You can also output run IDs and job IDs for use with 'gh run view'.
 
 **Aliases:** `ls`, `cc`, `check-checks`
