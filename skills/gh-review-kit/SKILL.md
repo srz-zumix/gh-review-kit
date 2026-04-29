@@ -30,8 +30,9 @@ gh auth login
 
 ```
 gh review-kit                       # Root command
-├── checks                          # List check runs for a pull request
-├── flush-failure                   # Display logs for failed check runs
+├── checks                          # Manage check runs for a pull request
+│   ├── list                        # List check runs for a pull request
+│   └── failure                     # Display logs for failed check runs
 ├── rerequest                       # Re-request review for a pull request
 ├── skills                          # Manage agent skills
 └── completion                      # Shell completion
@@ -46,14 +47,17 @@ gh review-kit                       # Root command
 | `--help, -h` | Show help for command |
 | `--version` | Show version |
 
-## List Check Runs (checks)
+## List Check Runs (checks list)
 
-List check runs for a pull request with advanced filtering by status, conclusion, and required status.
+List check runs for a pull request.
 
-**Aliases:** `cc`, `check-checks`
+This command is similar to 'gh pr checks' but allows filtering by status and conclusion.
+You can also output run IDs and job IDs for use with 'gh run view'.
+
+**Aliases:** `ls`, `cc`, `check-checks`
 
 ```bash
-gh review-kit checks [pull-request-identifier] [flags]
+gh review-kit checks list [pull-request-identifier] [flags]
 ```
 
 ### Options
@@ -74,47 +78,47 @@ gh review-kit checks [pull-request-identifier] [flags]
 
 ```bash
 # List check runs for current branch
-gh review-kit checks
+gh review-kit checks list
 
 # List check runs by PR number
-gh review-kit checks 123
+gh review-kit checks list 123
 
 # List check runs by PR URL
-gh review-kit checks https://github.com/owner/repo/pull/123
+gh review-kit checks list https://github.com/owner/repo/pull/123
 
 # List check runs by branch name
-gh review-kit checks feature/my-branch
+gh review-kit checks list feature/my-branch
 
 # List only completed check runs
-gh review-kit checks 123 --status completed
+gh review-kit checks list 123 --status completed
 
 # List only failed check runs
-gh review-kit checks 123 --conclusion failure
+gh review-kit checks list 123 --conclusion failure
 
 # List with detailed information
-gh review-kit checks 123 --details
+gh review-kit checks list 123 --details
 
 # List with custom columns
-gh review-kit checks 123 --headers NAME,STATUS,CONCLUSION,RUN_ID,JOB_ID
+gh review-kit checks list 123 --headers NAME,STATUS,CONCLUSION,RUN_ID,JOB_ID
 
 # List only required check runs
-gh review-kit checks 123 --required
+gh review-kit checks list 123 --required
 
 # List check runs in a different repository
-gh review-kit checks 123 --repo owner/repo
+gh review-kit checks list 123 --repo owner/repo
 
 # Using alias
-gh review-kit cc 123
+gh review-kit checks cc 123
 ```
 
-## Display Logs for Failed Check Runs (flush-failure)
+## Display Logs for Failed Check Runs (checks failure)
 
 Retrieve and display logs for all check runs with 'failure' conclusion in a pull request.
 
-**Aliases:** `ff`, `flush-fail`, `flush-failed`
+**Aliases:** `ff`, `fail`
 
 ```bash
-gh review-kit flush-failure [pull-request-identifier] [flags]
+gh review-kit checks failure [pull-request-identifier] [flags]
 ```
 
 ### Options
@@ -130,36 +134,46 @@ gh review-kit flush-failure [pull-request-identifier] [flags]
 
 ```bash
 # Display logs for failed check runs on current branch
-gh review-kit flush-failure
+gh review-kit checks failure
 
 # Display logs for failed check runs by PR number
-gh review-kit flush-failure 123
+gh review-kit checks failure 123
 
 # Display logs by PR URL
-gh review-kit flush-failure https://github.com/owner/repo/pull/123
+gh review-kit checks failure https://github.com/owner/repo/pull/123
 
 # Display logs by branch name
-gh review-kit flush-failure feature/my-branch
+gh review-kit checks failure feature/my-branch
 
 # Display full logs for failed check runs
-gh review-kit flush-failure 123 --full
+gh review-kit checks failure 123 --full
 
 # Display logs for only required failed check runs
-gh review-kit flush-failure 123 --required
+gh review-kit checks failure 123 --required
 
 # Display logs for only non-required failed check runs
-gh review-kit flush-failure 123 --no-required
+gh review-kit checks failure 123 --no-required
 
 # Display logs in a different repository
-gh review-kit flush-failure 123 --repo owner/repo
+gh review-kit checks failure 123 --repo owner/repo
 
 # Using alias
-gh review-kit ff 123
+gh review-kit checks ff 123
 ```
 
 ## Re-request Review (rerequest)
 
-Re-request review for a pull request. Without specifying reviewers, re-requests from all reviewers who have already submitted a review.
+Re-request review for a pull request.
+
+If reviewers are not specified, the command will re-request review from all reviewers who have already submitted a review.
+If reviewers are specified, the command will re-request review from the specified reviewers only.
+
+Reviewers can be specified as:
+- Individual users: username
+- Team reviewers: org/team-slug
+- With @ prefix: @username or @org/team-slug
+
+When --expand-team is specified, team reviewers will be expanded to individual team members.
 
 **Aliases:** `rr`
 
@@ -225,13 +239,13 @@ All commands accept a pull request identifier in these formats:
 
 ```bash
 # Check which runs failed
-gh review-kit cc 123 --conclusion failure
+gh review-kit checks list 123 --conclusion failure
 
 # View failed step logs
-gh review-kit ff 123
+gh review-kit checks failure 123
 
 # View full logs for deeper investigation
-gh review-kit ff 123 --full
+gh review-kit checks failure 123 --full
 ```
 
 ### Re-request Reviews After Fixing Issues
@@ -248,13 +262,13 @@ gh review-kit rr 123 --exclude-approved
 
 ```bash
 # List only required check runs
-gh review-kit cc 123 --required
+gh review-kit checks list 123 --required
 
 # View detailed info for required checks
-gh review-kit cc 123 --required --details
+gh review-kit checks list 123 --required --details
 
 # View logs for required failed checks only
-gh review-kit ff 123 --required
+gh review-kit checks failure 123 --required
 ```
 
 ## References

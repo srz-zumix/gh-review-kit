@@ -42,16 +42,18 @@ gh review-kit rerequest 123 --read-only
 
 ## Commands
 
-### List check runs for a pull request
+### checks
+
+#### List check runs for a pull request
 
 ```sh
-gh review-kit checks [pull-request-identifier] [--repo REPO] [--status STATUS] [--conclusion CONCLUSION] [--headers HEADERS] [--all] [--required|--no-required] [--details] [--color COLOR]
+gh review-kit checks list [pull-request-identifier] [--repo REPO] [--status STATUS] [--conclusion CONCLUSION] [--headers HEADERS] [--all] [--required|--no-required] [--details] [--color COLOR]
 ```
 
 List check runs for a pull request.
 
-This command is similar to `gh pr checks` but allows filtering by status and conclusion.
-You can customize the output columns and filter by required status.
+This command is similar to `gh pr checks` but also supports filtering by status, conclusion, and required check state.
+It can also control output with options such as `--all`, `--headers`, `--details`, and `--color`, and can show run IDs and job IDs for use with `gh run view`.
 
 The pull request can be specified by:
 
@@ -60,7 +62,7 @@ The pull request can be specified by:
 - Branch name (e.g., `feature/my-branch`)
 - If omitted, uses the current branch
 
-**Aliases:** `cc`, `check-checks`
+**Aliases:** `ls`, `cc`, `check-checks`
 
 **Options:**
 
@@ -78,40 +80,40 @@ The pull request can be specified by:
 
 ```sh
 # List check runs for current branch
-gh review-kit cc
+gh review-kit checks list
 
 # List check runs by PR number
-gh review-kit cc 123
+gh review-kit checks list 123
 
 # List check runs by PR URL
-gh review-kit cc https://github.com/owner/repo/pull/123
+gh review-kit checks list https://github.com/owner/repo/pull/123
 
 # List check runs by branch name
-gh review-kit cc feature/my-branch
+gh review-kit checks list feature/my-branch
 
 # List only completed check runs
-gh review-kit cc 123 --status completed
+gh review-kit checks list 123 --status completed
 
 # List only failed check runs
-gh review-kit cc 123 --conclusion failure
+gh review-kit checks list 123 --conclusion failure
 
 # List with detailed information
-gh review-kit cc 123 --details
+gh review-kit checks list 123 --details
 
 # List with custom columns
-gh review-kit cc 123 --headers NAME,STATUS,CONCLUSION,RUN_ID,JOB_ID
+gh review-kit checks list 123 --headers NAME,STATUS,CONCLUSION,RUN_ID,JOB_ID
 
 # List only required check runs
-gh review-kit cc 123 --required
+gh review-kit checks list 123 --required
 
 # List check runs in a different repository
-gh review-kit cc 123 --repo owner-name/repo-name
+gh review-kit checks list 123 --repo owner-name/repo-name
 ```
 
-### Display logs for failed check runs
+#### Display logs for failed check runs
 
 ```sh
-gh review-kit flush-failure [pull-request-identifier] [--repo REPO] [--full] [--required|--no-required]
+gh review-kit checks failure [pull-request-identifier] [--repo REPO] [--full] [--required|--no-required]
 ```
 
 Display logs for failed check runs in a pull request.
@@ -125,7 +127,7 @@ The pull request can be specified by:
 - Branch name (e.g., `feature/my-branch`)
 - If omitted, uses the current branch
 
-**Aliases:** `ff`, `flush-fail`, `flush-failed`
+**Aliases:** `ff`, `fail`
 
 **Options:**
 
@@ -138,28 +140,28 @@ The pull request can be specified by:
 
 ```sh
 # Display logs for current branch
-gh review-kit ff
+gh review-kit checks failure
 
 # Display logs for failed check runs by PR number
-gh review-kit ff 123
+gh review-kit checks failure 123
 
 # Display logs by PR URL
-gh review-kit ff https://github.com/owner/repo/pull/123
+gh review-kit checks failure https://github.com/owner/repo/pull/123
 
 # Display logs by branch name
-gh review-kit ff feature/my-branch
+gh review-kit checks failure feature/my-branch
 
 # Display full logs for failed check runs
-gh review-kit ff 123 --full
+gh review-kit checks failure 123 --full
 
 # Display logs for only required failed check runs
-gh review-kit ff 123 --required
+gh review-kit checks failure 123 --required
 
 # Display logs for only non-required failed check runs
-gh review-kit ff 123 --no-required
+gh review-kit checks failure 123 --no-required
 
 # Display logs for failed check runs in a different repository
-gh review-kit ff 123 --repo owner-name/repo-name
+gh review-kit checks failure 123 --repo owner-name/repo-name
 ```
 
 ### Re-request review for a pull request
@@ -172,6 +174,14 @@ Re-request review for a pull request.
 
 If reviewers are not specified, the command will re-request review from all reviewers who have already submitted a review.
 If reviewers are specified, the command will re-request review from the specified reviewers only.
+
+Reviewers can be specified as:
+
+- Individual users: `username`
+- Team reviewers: `org/team-slug`
+- With @ prefix: `@username` or `@org/team-slug`
+
+When `--expand-team` is specified, team reviewers will be expanded to individual team members.
 
 The pull request can be specified by:
 

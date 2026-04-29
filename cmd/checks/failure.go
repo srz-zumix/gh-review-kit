@@ -1,4 +1,4 @@
-package cmd
+package checks
 
 import (
 	"context"
@@ -6,15 +6,15 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/srz-zumix/gh-review-kit/pkg/checks"
+	localchecks "github.com/srz-zumix/gh-review-kit/pkg/checks"
 	"github.com/srz-zumix/go-gh-extension/pkg/cmdflags"
 	"github.com/srz-zumix/go-gh-extension/pkg/gh"
 	"github.com/srz-zumix/go-gh-extension/pkg/logger"
 	"github.com/srz-zumix/go-gh-extension/pkg/parser"
 )
 
-// NewFlushFailureCmd creates a new command to display logs for failed check runs
-func NewFlushFailureCmd() *cobra.Command {
+// NewFailureCmd creates a new command to display logs for failed check runs
+func NewFailureCmd() *cobra.Command {
 	var (
 		repo     string
 		required cmdflags.MutuallyExclusiveBoolFlags
@@ -22,12 +22,12 @@ func NewFlushFailureCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "flush-failure [pull-request-identifier]",
+		Use:   "failure [pull-request-identifier]",
 		Short: "Display logs for failed check runs",
 		Long: `Display logs for failed check runs in a pull request.
 
 This command retrieves all check runs with 'failure' conclusion and displays their logs.`,
-		Aliases: []string{"ff", "flush-fail", "flush-failed"},
+		Aliases: []string{"ff", "fail"},
 		Args:    cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			prIdentifier := ""
@@ -101,13 +101,13 @@ This command retrieves all check runs with 'failure' conclusion and displays the
 						continue
 					}
 
-					walker := checks.NewRunLogWalker(ctx, client, repository, workflowJob)
+					walker := localchecks.NewRunLogWalker(ctx, client, repository, workflowJob)
 					if err := walker.Fetch(3); err != nil {
 						logger.Warn("Failed to fetch logs for workflow job", "job_id", workflowJob.GetID(), "error", err)
 						continue
 					}
 
-					err = walker.Walk(*workflowJob, func(step *checks.TaskStep, stepLog *checks.StepLog) error {
+					err = walker.Walk(*workflowJob, func(step *localchecks.TaskStep, stepLog *localchecks.StepLog) error {
 						if step.GetConclusion() == gh.ChecksRunConclusionFailure {
 							content, err := stepLog.ReadContent()
 							if err != nil {
@@ -135,8 +135,4 @@ This command retrieves all check runs with 'failure' conclusion and displays the
 	required.AddNoPrefixFlag(cmd, "required", "Show only required check runs", "Show only non-required check runs")
 
 	return cmd
-}
-
-func init() {
-	rootCmd.AddCommand(NewFlushFailureCmd())
 }
