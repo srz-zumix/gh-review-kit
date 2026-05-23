@@ -229,3 +229,46 @@ gh review-kit rr 123 --reviewers @org/team --expand-team
 # Re-request review in a different repository
 gh review-kit rr 123 --repo owner-name/repo-name
 ```
+
+### Mark files as viewed in a pull request
+
+```sh
+gh review-kit reviewed [file...] [--repo REPO] [--pr PR]
+```
+
+Mark files in a pull request as viewed using the GitHub `markFileAsViewed` API.
+
+If file paths are specified as arguments, only those files will be marked as viewed.
+If no file paths are specified, all files marked as `linguist-generated` in the repository's `.gitattributes` will be marked as viewed.
+
+The pull request can be specified by:
+
+- PR number (e.g., `123` or `#123`)
+- PR URL (e.g., `https://github.com/owner/repo/pull/123`)
+- Branch name (e.g., `feature/my-branch`)
+- If omitted, uses the pull request associated with the current branch
+
+**Options:**
+
+- `--pr`: Pull request number, URL, or branch name (optional, default: current branch)
+- `--repo, -R`: Repository in the format 'owner/repo' (optional, defaults to current repository)
+
+**Examples:**
+
+```sh
+# Mark all linguist-generated files as viewed for current branch
+gh review-kit reviewed
+
+# Mark all linguist-generated files as viewed for a specific PR
+gh review-kit reviewed --pr 123
+
+# Mark specific files as viewed
+gh review-kit reviewed path/to/generated_file.go another/file.go
+
+# Mark specific files as viewed for a specific PR
+gh review-kit reviewed --pr 123 path/to/generated_file.go
+
+# Mark files as viewed in a different repository
+gh review-kit reviewed --repo owner-name/repo-name --pr 123
+```
+
