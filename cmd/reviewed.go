@@ -26,7 +26,7 @@ If file paths are specified as arguments, only those files will be marked as vie
 If no file paths are specified, all files marked as linguist-generated
 in the repository's .gitattributes file will be marked as viewed.
 
-The pull request can be specified with --pull-request. If omitted, the command
+The pull request can be specified with --pr. If omitted, the command
 uses the pull request associated with the current branch.`,
 		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
