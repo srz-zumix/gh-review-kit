@@ -62,7 +62,7 @@ estimate ─► extract ─► validate ─► stats ─┬─► sample        
 - `estimate` is read-only and fast. Always run it first on an unfamiliar repo or after widening filters.
 - `extract` is the only command that calls the GitHub API in bulk and writes the dataset directory. Everything downstream is local and deterministic.
 - `validate` should be run once after each `extract` (especially before `report` / `suggest-rules`).
-- `stats` / `sample` / `bundle` / `suggest-rules` / `report` all read the same dataset and accept the same filter flags, so you can iterate without re-extracting.
+- `sample` / `bundle` / `suggest-rules` / `report` all read the same dataset and accept the same filter flags, so you can iterate without re-extracting. (`stats` supports grouping and ranking, but does not currently expose the full filter-flag set.)
 
 ### API Access and `GH_HOST`
 
