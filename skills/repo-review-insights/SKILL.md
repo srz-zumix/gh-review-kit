@@ -68,7 +68,7 @@ gh review-kit comments estimate \
   --format json > ./.review-insights/{{owner__repo}}/estimate.json
 ```
 
-Read `estimate.json`. If `projected_api_calls` exceeds `rate_limit.remaining * 0.7`, narrow with one of:
+Read `estimate.json`. If `est_api_calls` exceeds `rate_limit_remaining * 0.7`, narrow with one of:
 - shorter `--since`
 - `--limit 500` (and plan to re-run)
 - a label filter (`--labels`)
