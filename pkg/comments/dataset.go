@@ -8,6 +8,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
+	"sort"
 	"time"
 )
 
@@ -342,7 +344,67 @@ func loadOrInitManifest(dir string, filters Filters) (*Manifest, error) {
 	if m.SchemaVersion != SchemaVersion {
 		return nil, fmt.Errorf("manifest schema version %d is not supported by this build (expected %d)", m.SchemaVersion, SchemaVersion)
 	}
+	if err := reconcileManifestFilters(&m, filters); err != nil {
+		return nil, err
+	}
 	return &m, nil
+}
+
+// reconcileManifestFilters verifies that the requested filters are compatible
+// with the existing dataset and keeps manifest provenance accurate. Appending
+// records for a new repository into the same dataset is allowed (the repo list
+// is unioned); any other difference in the corpus-shaping filters is rejected
+// so that re-running extract with different options cannot silently mix
+// incompatible corpora into a single dataset.
+func reconcileManifestFilters(m *Manifest, requested Filters) error {
+	if !filtersCompatible(m.Filters, requested) {
+		return fmt.Errorf("requested filters do not match the existing dataset manifest; use a new --dataset directory for a different extraction scope")
+	}
+	m.Filters.Repos = unionStrings(m.Filters.Repos, requested.Repos)
+	return nil
+}
+
+// filtersCompatible reports whether two filter sets describe the same corpus
+// shape, ignoring the repo list (which may grow across runs).
+func filtersCompatible(a, b Filters) bool {
+	a.Repos = nil
+	b.Repos = nil
+	return reflect.DeepEqual(normalizeFilters(a), normalizeFilters(b))
+}
+
+// normalizeFilters returns a copy of f with order-insensitive slices sorted so
+// they can be compared for equality regardless of input ordering.
+func normalizeFilters(f Filters) Filters {
+	f.Labels = sortedCopy(f.Labels)
+	f.CommentTypes = sortedCopy(f.CommentTypes)
+	f.Paths = sortedCopy(f.Paths)
+	return f
+}
+
+func sortedCopy(in []string) []string {
+	if len(in) == 0 {
+		return nil
+	}
+	out := append([]string(nil), in...)
+	sort.Strings(out)
+	return out
+}
+
+func unionStrings(a, b []string) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(a)+len(b))
+	for _, s := range append(append([]string(nil), a...), b...) {
+		if s == "" {
+			continue
+		}
+		if _, ok := seen[s]; ok {
+			continue
+		}
+		seen[s] = struct{}{}
+		out = append(out, s)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func writeJSONLine(w *bufio.Writer, v any) error {
@@ -406,6 +468,9 @@ func LoadManifest(dir string) (*Manifest, error) {
 	var m Manifest
 	if err := json.Unmarshal(b, &m); err != nil {
 		return nil, fmt.Errorf("failed to parse manifest: %w", err)
+	}
+	if m.SchemaVersion != SchemaVersion {
+		return nil, fmt.Errorf("manifest schema version %d is not supported by this build (expected %d)", m.SchemaVersion, SchemaVersion)
 	}
 	return &m, nil
 }

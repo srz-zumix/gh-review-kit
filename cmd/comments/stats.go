@@ -1,12 +1,11 @@
 package comments
 
 import (
-	"encoding/json"
 	"fmt"
-	"text/tabwriter"
 
+	"github.com/cli/cli/v2/pkg/cmdutil"
 	"github.com/spf13/cobra"
-	commentspkg "github.com/srz-zumix/gh-review-kit/pkg/comments"
+	"github.com/srz-zumix/gh-review-kit/pkg/comments"
 )
 
 // NewStatsCmd creates the 'comments stats' command.
@@ -32,7 +31,7 @@ ranked rows and --min-count to drop noise.`,
 			if dataset == "" {
 				return fmt.Errorf("--dataset is required")
 			}
-			result, err := commentspkg.Stats(dataset, commentspkg.StatsOptions{
+			result, err := comments.Stats(dataset, comments.StatsOptions{
 				GroupBy:  groupBy,
 				Top:      top,
 				MinCount: minCount,
@@ -40,20 +39,11 @@ ranked rows and --min-count to drop noise.`,
 			if err != nil {
 				return fmt.Errorf("failed to compute stats for dataset %q: %w", dataset, err)
 			}
-			if format == "json" {
-				enc := json.NewEncoder(cmd.OutOrStdout())
-				enc.SetIndent("", "  ")
-				if err := enc.Encode(result); err != nil {
-					return fmt.Errorf("failed to encode stats: %w", err)
-				}
-				return nil
+			renderer := comments.NewStatsRenderer(cmd.OutOrStdout())
+			if err := renderer.Render(result, format); err != nil {
+				return fmt.Errorf("failed to render stats for dataset %q: %w", dataset, err)
 			}
-			tw := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-			fmt.Fprintln(tw, "KEY\tCOUNT\tREVIEWERS\tREPOS\tCHANGES_REQUESTED\tEXAMPLE")
-			for _, row := range result.Rows {
-				fmt.Fprintf(tw, "%s\t%d\t%d\t%d\t%d\t%s\n", row.Key, row.Count, row.Reviewers, row.Repos, row.Blocking, row.ExampleURL)
-			}
-			return tw.Flush()
+			return nil
 		},
 	}
 
@@ -62,6 +52,6 @@ ranked rows and --min-count to drop noise.`,
 	f.StringVar(&groupBy, "group-by", "comment_type", "Grouping key: comment_type, repo, author, review_state, path_prefix, label")
 	f.IntVar(&top, "top", 0, "Keep only the top N rows after sorting (0 = keep all)")
 	f.IntVar(&minCount, "min-count", 0, "Drop rows with fewer than this many records")
-	f.StringVar(&format, "format", "text", "Output format: text, json")
+	cmdutil.StringEnumFlag(cmd, &format, "format", "", "text", []string{"text", "json"}, "Output format")
 	return cmd
 }

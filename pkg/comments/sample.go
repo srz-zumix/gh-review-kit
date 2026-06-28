@@ -18,6 +18,20 @@ const (
 	SampleStrategyRandom         SampleStrategy = "random"
 )
 
+// ParseSampleStrategy validates s against the supported strategies and returns
+// the corresponding SampleStrategy. An empty string defaults to "recent"; any
+// other unsupported value yields an error.
+func ParseSampleStrategy(s string) (SampleStrategy, error) {
+	switch SampleStrategy(s) {
+	case "":
+		return SampleStrategyRecent, nil
+	case SampleStrategyRecent, SampleStrategyDiverseAuthors, SampleStrategyBlocking, SampleStrategyRandom:
+		return SampleStrategy(s), nil
+	default:
+		return "", fmt.Errorf("unknown strategy %q (allowed: recent, diverse-authors, blocking, random)", s)
+	}
+}
+
 // SampleFilters narrows the corpus before grouping/sampling.
 type SampleFilters struct {
 	CommentTypes []CommentType

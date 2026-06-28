@@ -27,8 +27,10 @@ type Report struct {
 	Rules      *SuggestRulesResult `json:"rules"`
 }
 
-// BuildReport assembles a deterministic report bundle (stats slices + rule
-// candidates) from a dataset.
+// BuildReport assembles a report bundle (stats slices + rule candidates) from a
+// dataset. The stats rows and rule candidates are produced in a deterministic
+// order; only the GeneratedAt timestamp varies between otherwise identical
+// runs.
 func BuildReport(dir string, opts ReportOptions) (*Report, error) {
 	if opts.StatsTop <= 0 {
 		opts.StatsTop = 20
@@ -77,7 +79,9 @@ func WriteReportMarkdown(w io.Writer, r *Report) error {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# Comments Report\n\n")
 	fmt.Fprintf(&b, "- **Dataset**: `%s`\n", r.Dataset)
-	fmt.Fprintf(&b, "- **Generated**: %s\n", r.GeneratedAt.Format(time.RFC3339))
+	if !r.GeneratedAt.IsZero() {
+		fmt.Fprintf(&b, "- **Generated**: %s\n", r.GeneratedAt.Format(time.RFC3339))
+	}
 	if r.Manifest != nil {
 		c := r.Manifest.Counts
 		fmt.Fprintf(&b, "- **Counts**: %d PRs, %d review bodies, %d review comments, %d issue comments\n",
@@ -98,7 +102,7 @@ func WriteReportMarkdown(w io.Writer, r *Report) error {
 				latest = c.LatestAt.Format("2006-01-02")
 			}
 			fmt.Fprintf(&b, "| %s | %d | %d | %d | %d | %.1f%% | %s |\n",
-				c.Topic, c.Count, c.DistinctReviewers, c.DistinctRepos, c.BlockingCount, c.BlockingShare*100, latest)
+				tableCell(c.Topic), c.Count, c.DistinctReviewers, c.DistinctRepos, c.BlockingCount, c.BlockingShare*100, latest)
 		}
 		b.WriteString("\n### Evidence\n\n")
 		for _, c := range r.Rules.Candidates {
@@ -122,23 +126,36 @@ func WriteReportMarkdown(w io.Writer, r *Report) error {
 		}
 	}
 
-	b.WriteString("## Stats\n\n")
-	for _, key := range []string{"comment_type", "review_state", "author", "path_prefix", "repo"} {
-		s, ok := r.Stats[key]
-		if !ok || s == nil || len(s.Rows) == 0 {
-			continue
+	statsKeys := []string{"comment_type", "review_state", "author", "path_prefix", "repo"}
+	hasStats := false
+	for _, key := range statsKeys {
+		if s, ok := r.Stats[key]; ok && s != nil && len(s.Rows) > 0 {
+			hasStats = true
+			break
 		}
-		fmt.Fprintf(&b, "### %s\n\n", key)
-		b.WriteString("| Key | Count | Reviewers | Repos | Blocking |\n")
-		b.WriteString("| --- | ---: | ---: | ---: | ---: |\n")
-		for _, row := range s.Rows {
-			fmt.Fprintf(&b, "| %s | %d | %d | %d | %d |\n", row.Key, row.Count, row.Reviewers, row.Repos, row.Blocking)
+	}
+	if hasStats {
+		b.WriteString("## Stats\n\n")
+		for _, key := range statsKeys {
+			s, ok := r.Stats[key]
+			if !ok || s == nil || len(s.Rows) == 0 {
+				continue
+			}
+			fmt.Fprintf(&b, "### %s\n\n", key)
+			b.WriteString("| Key | Count | Reviewers | Repos | Blocking |\n")
+			b.WriteString("| --- | ---: | ---: | ---: | ---: |\n")
+			for _, row := range s.Rows {
+				fmt.Fprintf(&b, "| %s | %d | %d | %d | %d |\n", tableCell(row.Key), row.Count, row.Reviewers, row.Repos, row.Blocking)
+			}
+			b.WriteString("\n")
 		}
-		b.WriteString("\n")
 	}
 	_, err := io.WriteString(w, b.String())
 	return err
 }
+
+// tableCell escapes a value so it is safe to embed in a Markdown table cell.
+func tableCell(s string) string { return oneLine(s) }
 
 func oneLine(s string) string {
 	s = strings.ReplaceAll(s, "\r\n", " ")

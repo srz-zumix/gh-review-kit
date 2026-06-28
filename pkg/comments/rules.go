@@ -38,10 +38,9 @@ func (t *TopicSet) compile() error {
 	return nil
 }
 
-// LoadTopicSet reads a topic dictionary from disk. Supported formats are
-// JSON (.json) and a tiny YAML subset (.yaml/.yml) limited to the schema below.
-// To keep dependencies minimal, only JSON parsing is provided here; YAML files
-// are rejected with a clear message.
+// LoadTopicSet reads a topic dictionary from disk. Only JSON (.json) is
+// supported. To keep dependencies minimal, YAML files (.yaml/.yml) are not
+// parsed and are rejected with a clear message.
 func LoadTopicSet(path string) (*TopicSet, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {

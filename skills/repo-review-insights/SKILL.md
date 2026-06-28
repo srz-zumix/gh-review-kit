@@ -40,6 +40,9 @@ Do not invent values for `--repo` if it is ambiguous; ask the user.
 ### Step 1. Sanity check the target with plain `gh`
 
 ```bash
+# Ensure the dataset directory exists before writing into it
+mkdir -p ./.review-insights/{{owner__repo}}
+
 # Confirm repo exists, capture default branch, primary language, recent activity
 gh repo view {{owner/repo}} --json nameWithOwner,defaultBranchRef,primaryLanguage,pushedAt,description \
   | tee ./.review-insights/{{owner__repo}}/repo.json
@@ -49,8 +52,8 @@ gh pr list --repo {{owner/repo}} --state merged --limit 50 \
   --json number,title,author,mergedAt,additions,deletions,changedFiles,labels \
   > ./.review-insights/{{owner__repo}}/recent-prs.json
 
-# Top reviewers by recent reviews (lightweight signal before extraction)
-gh api -X GET "repos/{{owner/repo}}/pulls?state=closed&per_page=30" --paginate \
+# Recent closed PRs (lightweight signal before extraction; PR authors, not reviewers)
+gh api -X GET "repos/{{owner/repo}}/pulls?state=closed&per_page=30" \
   --jq '.[] | {n:.number, t:.title, merged:.merged_at, user:.user.login}' \
   > ./.review-insights/{{owner__repo}}/recent-pulls.jsonl
 ```

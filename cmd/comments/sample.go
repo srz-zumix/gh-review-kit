@@ -61,6 +61,10 @@ Strategies:
 			if err != nil {
 				return fmt.Errorf("invalid --comment-types: %w", err)
 			}
+			strat, err := commentspkg.ParseSampleStrategy(strategy)
+			if err != nil {
+				return err
+			}
 
 			opts := commentspkg.SampleOptions{
 				Filters: commentspkg.SampleFilters{
@@ -75,7 +79,7 @@ Strategies:
 				},
 				GroupBy:  groupBy,
 				PerGroup: perGroup,
-				Strategy: commentspkg.SampleStrategy(strategy),
+				Strategy: strat,
 				Seed:     seed,
 			}
 

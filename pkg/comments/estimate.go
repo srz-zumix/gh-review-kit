@@ -3,6 +3,7 @@ package comments
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cli/go-gh/v2/pkg/repository"
@@ -96,7 +97,13 @@ func Estimate(ctx context.Context, client *gh.GitHubClient, opts EstimateOptions
 			if err != nil {
 				return nil, fmt.Errorf("failed to get reviews for PR #%d: %w", pr.GetNumber(), err)
 			}
-			totalRB += len(rvs)
+			// Match extract, which skips reviews with no narrative body
+			// (e.g. approve-only reviews), so the estimate is not inflated.
+			for _, rv := range rvs {
+				if strings.TrimSpace(rv.GetBody()) != "" {
+					totalRB++
+				}
+			}
 			sampleAPICalls += pages(len(rvs))
 		}
 		if commentTypes[CommentTypeReviewComment] {
