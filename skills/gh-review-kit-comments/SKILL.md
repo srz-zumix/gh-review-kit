@@ -109,7 +109,7 @@ gh review-kit comments report --dataset ./dataset --output ./report.md
 
 ### Filter Flags Are Shared
 
-Most analysis subcommands (`stats`, `sample`, `bundle`, `suggest-rules`, `report`) accept the same filter flags as `extract`: `--comment-types`, `--path`, `--review-states`, `--since`, `--until`, `--min-length`, `--include-bots`, `--authors` (where applicable). Prefer extracting a wide corpus once and slicing it later — re-extraction is the expensive step.
+Most analysis subcommands (`sample`, `bundle`, `suggest-rules`, `report`) accept the same filter flags as `extract`: `--comment-types`, `--path`, `--review-states`, `--since`, `--until`, `--min-length`, `--include-bots`, `--authors` (where applicable). Prefer extracting a wide corpus once and slicing it later — re-extraction is the expensive step.
 
 ### Iteration Loop
 
