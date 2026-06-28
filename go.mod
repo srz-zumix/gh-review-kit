@@ -2,7 +2,7 @@ module github.com/srz-zumix/gh-review-kit
 
 go 1.26.1
 
-require github.com/srz-zumix/go-gh-extension v0.4.34
+require github.com/srz-zumix/go-gh-extension v0.4.39
 
 require (
 	dario.cat/mergo v1.0.2 // indirect

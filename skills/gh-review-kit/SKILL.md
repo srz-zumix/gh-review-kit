@@ -43,6 +43,7 @@ gh review-kit                       # Root command
 │   ├── suggest-rules               # Rank candidate coding rules / review viewpoints
 │   └── report                      # Generate a Markdown/JSON report from a dataset
 ├── rerequest                       # Re-request review for a pull request
+├── reviewed                        # Mark files in a pull request as viewed
 ├── skills                          # Manage agent skills
 └── completion                      # Shell completion
 ```
@@ -574,6 +575,43 @@ gh review-kit rerequest 123 --repo owner/repo
 gh review-kit rr 123
 ```
 
+## Mark Files as Viewed (reviewed)
+
+Mark files in a pull request as viewed using the GitHub `markFileAsViewed` API.
+
+If file paths are specified as arguments, only those files will be marked as viewed.
+If no file paths are specified, all files marked as `linguist-generated` in the repository's `.gitattributes` will be marked as viewed.
+
+```bash
+gh review-kit reviewed [file...] [flags]
+```
+
+### Options
+
+| Flag | Description |
+| --- | --- |
+| `--pr` | Pull request number, URL, or branch name (default: current branch) |
+| `--repo, -R` | Repository in the format 'owner/repo' (default: current repository) |
+
+### Examples
+
+```bash
+# Mark all linguist-generated files as viewed for current branch
+gh review-kit reviewed
+
+# Mark all linguist-generated files as viewed for a specific PR
+gh review-kit reviewed --pr 123
+
+# Mark specific files as viewed
+gh review-kit reviewed path/to/generated_file.go another/file.go
+
+# Mark specific files as viewed for a specific PR
+gh review-kit reviewed --pr 123 path/to/generated_file.go
+
+# Mark files as viewed in a different repository
+gh review-kit reviewed --repo owner/repo --pr 123
+```
+
 ## Pull Request Identifier
 
 All commands accept a pull request identifier in these formats:
@@ -606,6 +644,16 @@ gh review-kit rr 123
 
 # Re-request only reviewers who haven't approved yet
 gh review-kit rr 123 --exclude-approved
+```
+
+### Skip Reviewing Auto-generated Files
+
+```bash
+# Mark all linguist-generated files as viewed (reads .gitattributes)
+gh review-kit reviewed --pr 123
+
+# Mark specific generated files as viewed
+gh review-kit reviewed --pr 123 docs/generated/api.go
 ```
 
 ### Monitor Required Checks
