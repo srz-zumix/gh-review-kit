@@ -1,15 +1,16 @@
 package comments
 
 import (
-	"bytes"
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/cli/cli/v2/pkg/cmdutil"
+	"github.com/srz-zumix/go-gh-extension/pkg/render"
 )
 
-func TestStatsRendererText(t *testing.T) {
-	var buf bytes.Buffer
-	renderer := NewStatsRenderer(&buf)
+func TestRenderStatsText(t *testing.T) {
+	sr := render.NewStringRenderer(nil)
 	result := &StatsResult{
 		Dataset: "dataset",
 		GroupBy: "comment_type",
@@ -18,11 +19,11 @@ func TestStatsRendererText(t *testing.T) {
 		},
 	}
 
-	if err := renderer.Render(result, "text"); err != nil {
-		t.Fatalf("Render(text): %v", err)
+	if err := RenderStats(&sr.Renderer, result); err != nil {
+		t.Fatalf("RenderStats(text): %v", err)
 	}
 
-	got := buf.String()
+	got := sr.Stdout.String()
 	for _, want := range []string{"KEY", "review_comment", "3", "https://example.test/1"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("text output missing %q:\n%s", want, got)
@@ -30,21 +31,20 @@ func TestStatsRendererText(t *testing.T) {
 	}
 }
 
-func TestStatsRendererJSON(t *testing.T) {
-	var buf bytes.Buffer
-	renderer := NewStatsRenderer(&buf)
+func TestRenderStatsJSON(t *testing.T) {
+	sr := render.NewStringRenderer(cmdutil.NewJSONExporter())
 	result := &StatsResult{
 		Dataset: "dataset",
 		GroupBy: "comment_type",
-		Rows: []StatRow{{Key: "review_comment", Count: 3}},
+		Rows:    []StatRow{{Key: "review_comment", Count: 3}},
 	}
 
-	if err := renderer.Render(result, "json"); err != nil {
-		t.Fatalf("Render(json): %v", err)
+	if err := RenderStats(&sr.Renderer, result); err != nil {
+		t.Fatalf("RenderStats(json): %v", err)
 	}
 
 	var decoded StatsResult
-	if err := json.Unmarshal(buf.Bytes(), &decoded); err != nil {
+	if err := json.Unmarshal(sr.Stdout.Bytes(), &decoded); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	if decoded.Dataset != result.Dataset || decoded.GroupBy != result.GroupBy || len(decoded.Rows) != 1 {

@@ -6,6 +6,7 @@ import (
 	"github.com/cli/cli/v2/pkg/cmdutil"
 	"github.com/spf13/cobra"
 	"github.com/srz-zumix/gh-review-kit/pkg/comments"
+	"github.com/srz-zumix/go-gh-extension/pkg/render"
 )
 
 // NewStatsCmd creates the 'comments stats' command.
@@ -15,7 +16,7 @@ func NewStatsCmd() *cobra.Command {
 		groupBy  string
 		top      int
 		minCount int
-		format   string
+		exporter cmdutil.Exporter
 	)
 
 	cmd := &cobra.Command{
@@ -39,8 +40,8 @@ ranked rows and --min-count to drop noise.`,
 			if err != nil {
 				return fmt.Errorf("failed to compute stats for dataset %q: %w", dataset, err)
 			}
-			renderer := comments.NewStatsRenderer(cmd.OutOrStdout())
-			if err := renderer.Render(result, format); err != nil {
+			renderer := render.NewRenderer(exporter)
+			if err := comments.RenderStats(renderer, result); err != nil {
 				return fmt.Errorf("failed to render stats for dataset %q: %w", dataset, err)
 			}
 			return nil
@@ -52,6 +53,6 @@ ranked rows and --min-count to drop noise.`,
 	f.StringVar(&groupBy, "group-by", "comment_type", "Grouping key: comment_type, repo, author, review_state, path_prefix, label")
 	f.IntVar(&top, "top", 0, "Keep only the top N rows after sorting (0 = keep all)")
 	f.IntVar(&minCount, "min-count", 0, "Drop rows with fewer than this many records")
-	cmdutil.StringEnumFlag(cmd, &format, "format", "", "text", []string{"text", "json"}, "Output format")
+	cmdutil.AddFormatFlags(cmd, &exporter)
 	return cmd
 }

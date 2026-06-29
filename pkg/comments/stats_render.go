@@ -1,52 +1,32 @@
 package comments
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
-	"text/tabwriter"
+	"strconv"
+
+	"github.com/srz-zumix/go-gh-extension/pkg/render"
 )
 
-// StatsRenderer renders a StatsResult in text or JSON form.
-type StatsRenderer struct {
-	out io.Writer
-}
-
-// NewStatsRenderer creates a renderer that writes to the provided stream.
-func NewStatsRenderer(out io.Writer) *StatsRenderer {
-	return &StatsRenderer{out: out}
-}
-
-// Render writes the stats result in the requested format.
-func (r *StatsRenderer) Render(result *StatsResult, format string) error {
+// RenderStats writes the stats result using the provided renderer.
+// When an exporter is configured (e.g. --format json) the structured result is
+// emitted; otherwise a table is rendered.
+func RenderStats(r *render.Renderer, result *StatsResult) error {
 	if result == nil {
 		return fmt.Errorf("stats result is nil")
 	}
-	switch format {
-	case "json":
-		return r.writeJSON(result)
-	case "text", "":
-		return r.writeText(result)
-	default:
-		return fmt.Errorf("unknown --format %q (allowed: text, json)", format)
+	if r.HasExporter() {
+		return r.RenderExportedData(result)
 	}
-}
-
-func (r *StatsRenderer) writeJSON(result *StatsResult) error {
-	enc := json.NewEncoder(r.out)
-	enc.SetIndent("", "  ")
-	return enc.Encode(result)
-}
-
-func (r *StatsRenderer) writeText(result *StatsResult) error {
-	tw := tabwriter.NewWriter(r.out, 0, 0, 2, ' ', 0)
-	if _, err := fmt.Fprintln(tw, "KEY\tCOUNT\tREVIEWERS\tREPOS\tCHANGES_REQUESTED\tEXAMPLE"); err != nil {
-		return err
-	}
+	tw := r.NewTableWriter([]string{"KEY", "COUNT", "REVIEWERS", "REPOS", "CHANGES_REQUESTED", "EXAMPLE"})
 	for _, row := range result.Rows {
-		if _, err := fmt.Fprintf(tw, "%s\t%d\t%d\t%d\t%d\t%s\n", row.Key, row.Count, row.Reviewers, row.Repos, row.Blocking, row.ExampleURL); err != nil {
-			return err
-		}
+		tw.Append([]string{
+			row.Key,
+			strconv.Itoa(row.Count),
+			strconv.Itoa(row.Reviewers),
+			strconv.Itoa(row.Repos),
+			strconv.Itoa(row.Blocking),
+			row.ExampleURL,
+		})
 	}
-	return tw.Flush()
+	return tw.Render()
 }
