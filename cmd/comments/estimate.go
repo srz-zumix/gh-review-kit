@@ -2,14 +2,15 @@ package comments
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"text/tabwriter"
+	"strconv"
 
+	"github.com/cli/cli/v2/pkg/cmdutil"
 	"github.com/spf13/cobra"
-	commentspkg "github.com/srz-zumix/gh-review-kit/pkg/comments"
+	"github.com/srz-zumix/gh-review-kit/pkg/comments"
 	"github.com/srz-zumix/go-gh-extension/pkg/gh"
 	"github.com/srz-zumix/go-gh-extension/pkg/parser"
+	"github.com/srz-zumix/go-gh-extension/pkg/render"
 )
 
 // NewEstimateCmd creates the 'comments estimate' command.
@@ -24,7 +25,7 @@ func NewEstimateCmd() *cobra.Command {
 		commentTypes []string
 		limit        int
 		sampleSize   int
-		format       string
+		exporter     cmdutil.Exporter
 	)
 
 	cmd := &cobra.Command{
@@ -56,12 +57,12 @@ limits or running out of REST quota mid-run.`,
 			if err != nil {
 				return err
 			}
-			types, err := commentspkg.CommentTypesFromStrings(commentTypes)
+			types, err := comments.CommentTypesFromStrings(commentTypes)
 			if err != nil {
 				return fmt.Errorf("invalid --comment-types: %w", err)
 			}
 
-			result, err := commentspkg.Estimate(context.Background(), client, commentspkg.EstimateOptions{
+			result, err := comments.Estimate(context.Background(), client, comments.EstimateOptions{
 				Repo:         repository,
 				State:        state,
 				MergedOnly:   mergedOnly,
@@ -75,7 +76,7 @@ limits or running out of REST quota mid-run.`,
 			if err != nil {
 				return fmt.Errorf("failed to estimate: %w", err)
 			}
-			return writeEstimateOutput(cmd, result, format)
+			return writeEstimateOutput(render.NewRenderer(exporter), result)
 		},
 	}
 
@@ -89,41 +90,34 @@ limits or running out of REST quota mid-run.`,
 	f.StringSliceVar(&commentTypes, "comment-types", nil, "Comment types to estimate (default: all). Allowed: review_body, review_comment, issue_comment")
 	f.IntVar(&limit, "limit", 0, "Cap PR count to consider (0 = no cap)")
 	f.IntVar(&sampleSize, "sample-size", 5, "Number of PRs to sample for averages")
-	f.StringVar(&format, "format", "text", "Output format: text, json")
+	cmdutil.AddFormatFlags(cmd, &exporter)
 	return cmd
 }
 
-func writeEstimateOutput(cmd *cobra.Command, r *commentspkg.EstimateResult, format string) error {
-	w := cmd.OutOrStdout()
-	switch format {
-	case "json":
-		enc := json.NewEncoder(w)
-		enc.SetIndent("", "  ")
-		return enc.Encode(r)
-	case "text", "":
-		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-		fmt.Fprintf(tw, "Repo:\t%s\n", r.Repo)
-		fmt.Fprintf(tw, "Matched PRs:\t%d\n", r.PRCount)
-		fmt.Fprintf(tw, "Sampled PRs:\t%d\n", r.SampledPRs)
-		fmt.Fprintf(tw, "Avg per PR:\treview_bodies=%.2f review_comments=%.2f issue_comments=%.2f\n",
-			r.AvgReviewBodies, r.AvgReviewComments, r.AvgIssueComments)
-		fmt.Fprintf(tw, "Estimated comments:\t%d (review_bodies=%d review_comments=%d issue_comments=%d)\n",
-			r.EstTotalComments, r.EstReviewBodies, r.EstReviewComments, r.EstIssueComments)
-		fmt.Fprintf(tw, "Estimated API calls:\t%d\n", r.EstAPICalls)
-		if r.RateLimitLimit > 0 {
-			fmt.Fprintf(tw, "Rate limit (core):\t%d/%d remaining (resets %s)\n",
-				r.RateLimitRemaining, r.RateLimitLimit, r.RateLimitResetAt.Format("2006-01-02 15:04 MST"))
-		} else {
-			fmt.Fprintln(tw, "Rate limit (core):\tunknown")
-		}
-		if err := tw.Flush(); err != nil {
-			return err
-		}
-		for _, msg := range r.Warnings {
-			fmt.Fprintf(w, "WARNING: %s\n", msg)
-		}
-		return nil
-	default:
-		return fmt.Errorf("unknown --format %q (allowed: text, json)", format)
+func writeEstimateOutput(r *render.Renderer, result *comments.EstimateResult) error {
+	if r.HasExporter() {
+		return r.RenderExportedData(result)
 	}
+	tw := r.NewTableWriter([]string{"FIELD", "VALUE"})
+	tw.Append([]string{"Repo", result.Repo})
+	tw.Append([]string{"Matched PRs", strconv.Itoa(result.PRCount)})
+	tw.Append([]string{"Sampled PRs", strconv.Itoa(result.SampledPRs)})
+	tw.Append([]string{"Avg per PR", fmt.Sprintf("review_bodies=%.2f review_comments=%.2f issue_comments=%.2f",
+		result.AvgReviewBodies, result.AvgReviewComments, result.AvgIssueComments)})
+	tw.Append([]string{"Estimated comments", fmt.Sprintf("%d (review_bodies=%d review_comments=%d issue_comments=%d)",
+		result.EstTotalComments, result.EstReviewBodies, result.EstReviewComments, result.EstIssueComments)})
+	tw.Append([]string{"Estimated API calls", strconv.Itoa(result.EstAPICalls)})
+	if result.RateLimitLimit > 0 {
+		tw.Append([]string{"Rate limit (core)", fmt.Sprintf("%d/%d remaining (resets %s)",
+			result.RateLimitRemaining, result.RateLimitLimit, result.RateLimitResetAt.Format("2006-01-02 15:04 MST"))})
+	} else {
+		tw.Append([]string{"Rate limit (core)", "unknown"})
+	}
+	if err := tw.Render(); err != nil {
+		return err
+	}
+	for _, msg := range result.Warnings {
+		r.WriteLine("WARNING: " + msg)
+	}
+	return nil
 }

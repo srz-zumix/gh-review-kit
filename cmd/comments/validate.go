@@ -1,19 +1,20 @@
 package comments
 
 import (
-	"encoding/json"
 	"fmt"
 
+	"github.com/cli/cli/v2/pkg/cmdutil"
 	"github.com/spf13/cobra"
-	commentspkg "github.com/srz-zumix/gh-review-kit/pkg/comments"
+	"github.com/srz-zumix/gh-review-kit/pkg/comments"
+	"github.com/srz-zumix/go-gh-extension/pkg/render"
 )
 
 // NewValidateCmd creates the 'comments validate' command.
 func NewValidateCmd() *cobra.Command {
 	var (
-		dataset string
-		strict  bool
-		format  string
+		dataset  string
+		strict   bool
+		exporter cmdutil.Exporter
 	)
 
 	cmd := &cobra.Command{
@@ -28,27 +29,25 @@ linkage. Use --strict to exit non-zero when any issue is reported.`,
 			if dataset == "" {
 				return fmt.Errorf("--dataset is required")
 			}
-			report, err := commentspkg.Validate(dataset)
+			report, err := comments.Validate(dataset)
 			if err != nil {
 				return fmt.Errorf("failed to validate dataset %q: %w", dataset, err)
 			}
-			if format == "json" {
-				enc := json.NewEncoder(cmd.OutOrStdout())
-				enc.SetIndent("", "  ")
-				if err := enc.Encode(report); err != nil {
+			r := render.NewRenderer(exporter)
+			if r.HasExporter() {
+				if err := r.RenderExportedData(report); err != nil {
 					return fmt.Errorf("failed to encode report: %w", err)
 				}
 			} else {
-				out := cmd.OutOrStdout()
-				fmt.Fprintf(out, "Comments: %d\n", report.Comments)
-				fmt.Fprintf(out, "PRs:      %d\n", report.PRs)
-				fmt.Fprintf(out, "Duplicate comment IDs: %d\n", report.DuplicateIDs)
+				r.WriteLine(fmt.Sprintf("Comments: %d", report.Comments))
+				r.WriteLine(fmt.Sprintf("PRs:      %d", report.PRs))
+				r.WriteLine(fmt.Sprintf("Duplicate comment IDs: %d", report.DuplicateIDs))
 				if len(report.Issues) == 0 {
-					fmt.Fprintln(out, "No issues found.")
+					r.WriteLine("No issues found.")
 				} else {
-					fmt.Fprintf(out, "Issues (%d):\n", len(report.Issues))
+					r.WriteLine(fmt.Sprintf("Issues (%d):", len(report.Issues)))
 					for _, issue := range report.Issues {
-						fmt.Fprintf(out, "  - %s\n", issue)
+						r.WriteLine("  - " + issue)
 					}
 				}
 			}
@@ -62,6 +61,6 @@ linkage. Use --strict to exit non-zero when any issue is reported.`,
 	f := cmd.Flags()
 	f.StringVar(&dataset, "dataset", "", "Dataset directory (required)")
 	f.BoolVar(&strict, "strict", false, "Exit non-zero when any issue is reported")
-	f.StringVar(&format, "format", "text", "Output format: text, json")
+	cmdutil.AddFormatFlags(cmd, &exporter)
 	return cmd
 }

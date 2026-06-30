@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/cli/cli/v2/pkg/cmdutil"
 	"github.com/spf13/cobra"
-	commentspkg "github.com/srz-zumix/gh-review-kit/pkg/comments"
+	"github.com/srz-zumix/gh-review-kit/pkg/comments"
+	"github.com/srz-zumix/go-gh-extension/pkg/cmdflags"
 )
 
 // NewReportCmd creates the 'comments report' command.
@@ -15,6 +17,7 @@ func NewReportCmd() *cobra.Command {
 		topicsFile   string
 		output       string
 		format       string
+		exporter     cmdutil.Exporter
 		minCount     int
 		minReviewers int
 		examples     int
@@ -41,9 +44,9 @@ which topics should become coding rules.`,
 			if dataset == "" {
 				return fmt.Errorf("--dataset is required")
 			}
-			var topics *commentspkg.TopicSet
+			var topics *comments.TopicSet
 			if topicsFile != "" {
-				ts, err := commentspkg.LoadTopicSet(topicsFile)
+				ts, err := comments.LoadTopicSet(topicsFile)
 				if err != nil {
 					return err
 				}
@@ -57,13 +60,13 @@ which topics should become coding rules.`,
 			if err != nil {
 				return err
 			}
-			types, err := commentspkg.CommentTypesFromStrings(commentTypes)
+			types, err := comments.CommentTypesFromStrings(commentTypes)
 			if err != nil {
 				return fmt.Errorf("invalid --comment-types: %w", err)
 			}
-			r, err := commentspkg.BuildReport(dataset, commentspkg.ReportOptions{
+			r, err := comments.BuildReport(dataset, comments.ReportOptions{
 				Topics: topics,
-				Filters: commentspkg.SampleFilters{
+				Filters: comments.SampleFilters{
 					CommentTypes: types,
 					ReviewStates: normalizeStates(reviewStates),
 					PathPrefixes: paths,
@@ -90,13 +93,11 @@ which topics should become coding rules.`,
 				defer f.Close()
 				w = f
 			}
-			switch format {
-			case "json":
-				return commentspkg.WriteReportJSON(w, r)
-			case "markdown", "":
-				return commentspkg.WriteReportMarkdown(w, r)
+			switch {
+			case exporter != nil:
+				return comments.WriteReportJSON(w, r)
 			default:
-				return fmt.Errorf("unknown --format %q (allowed: markdown, json)", format)
+				return comments.WriteReportMarkdown(w, r)
 			}
 		},
 	}
@@ -105,7 +106,6 @@ which topics should become coding rules.`,
 	f.StringVar(&dataset, "dataset", "", "Dataset directory (required)")
 	f.StringVar(&topicsFile, "topics-file", "", "JSON dictionary of topics (default: built-in)")
 	f.StringVar(&output, "output", "", "Output file path (default: stdout)")
-	f.StringVar(&format, "format", "markdown", "Output format: markdown, json")
 	f.IntVar(&minCount, "min-count", 3, "Drop topics matched fewer than this many times")
 	f.IntVar(&minReviewers, "min-reviewers", 2, "Drop topics matched by fewer than this many distinct reviewers")
 	f.IntVar(&examples, "examples", 3, "Number of evidence examples to include per topic")
@@ -117,5 +117,8 @@ which topics should become coding rules.`,
 	f.StringVar(&untilFlag, "until", "", "Filter: created at or before this RFC3339 timestamp")
 	f.IntVar(&minLength, "min-length", 0, "Filter: minimum trimmed body length in bytes")
 	f.BoolVar(&includeBots, "include-bots", false, "Include bot-authored comments")
+	if err := cmdflags.AddFormatFlags(cmd, &exporter, &format, "markdown", []string{"markdown"}); err != nil {
+		panic(err)
+	}
 	return cmd
 }

@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/cli/cli/v2/pkg/cmdutil"
 	"github.com/spf13/cobra"
-	commentspkg "github.com/srz-zumix/gh-review-kit/pkg/comments"
+	"github.com/srz-zumix/gh-review-kit/pkg/comments"
+	"github.com/srz-zumix/go-gh-extension/pkg/cmdflags"
 )
 
 // NewSuggestRulesCmd creates the 'comments suggest-rules' command.
@@ -19,6 +21,7 @@ func NewSuggestRulesCmd() *cobra.Command {
 		examples     int
 		output       string
 		format       string
+		exporter     cmdutil.Exporter
 		commentTypes []string
 		reviewStates []string
 		paths        []string
@@ -47,9 +50,9 @@ URLs. No fuzzy clustering or embeddings are used; the output is reproducible.`,
 			if dataset == "" {
 				return fmt.Errorf("--dataset is required")
 			}
-			var topics *commentspkg.TopicSet
+			var topics *comments.TopicSet
 			if topicsFile != "" {
-				ts, err := commentspkg.LoadTopicSet(topicsFile)
+				ts, err := comments.LoadTopicSet(topicsFile)
 				if err != nil {
 					return err
 				}
@@ -63,13 +66,13 @@ URLs. No fuzzy clustering or embeddings are used; the output is reproducible.`,
 			if err != nil {
 				return err
 			}
-			types, err := commentspkg.CommentTypesFromStrings(commentTypes)
+			types, err := comments.CommentTypesFromStrings(commentTypes)
 			if err != nil {
 				return fmt.Errorf("invalid --comment-types: %w", err)
 			}
-			result, err := commentspkg.SuggestRules(dataset, commentspkg.SuggestRulesOptions{
+			result, err := comments.SuggestRules(dataset, comments.SuggestRulesOptions{
 				Topics: topics,
-				Filters: commentspkg.SampleFilters{
+				Filters: comments.SampleFilters{
 					CommentTypes: types,
 					ReviewStates: normalizeStates(reviewStates),
 					PathPrefixes: paths,
@@ -85,7 +88,7 @@ URLs. No fuzzy clustering or embeddings are used; the output is reproducible.`,
 			if err != nil {
 				return fmt.Errorf("failed to suggest rules: %w", err)
 			}
-			return writeRulesOutput(cmd, result, output, format)
+			return writeRulesOutput(cmd, result, output, format, exporter)
 		},
 	}
 
@@ -96,7 +99,6 @@ URLs. No fuzzy clustering or embeddings are used; the output is reproducible.`,
 	f.IntVar(&minReviewers, "min-reviewers", 2, "Drop topics matched by fewer than this many distinct reviewers")
 	f.IntVar(&examples, "examples", 3, "Number of evidence examples to include per topic")
 	f.StringVar(&output, "output", "", "Output file path (default: stdout)")
-	f.StringVar(&format, "format", "text", "Output format: text, json, markdown")
 	f.StringSliceVar(&commentTypes, "comment-types", nil, "Filter: comment types (review_body, review_comment, issue_comment)")
 	f.StringSliceVar(&reviewStates, "review-states", nil, "Filter: review states (APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED)")
 	f.StringSliceVar(&paths, "path", nil, "Filter: path prefixes for inline review comments")
@@ -104,10 +106,13 @@ URLs. No fuzzy clustering or embeddings are used; the output is reproducible.`,
 	f.StringVar(&untilFlag, "until", "", "Filter: created at or before this RFC3339 timestamp")
 	f.IntVar(&minLength, "min-length", 0, "Filter: minimum trimmed body length in bytes")
 	f.BoolVar(&includeBots, "include-bots", false, "Include bot-authored comments")
+	if err := cmdflags.AddFormatFlags(cmd, &exporter, &format, "text", []string{"text", "markdown"}); err != nil {
+		panic(err)
+	}
 	return cmd
 }
 
-func writeRulesOutput(cmd *cobra.Command, r *commentspkg.SuggestRulesResult, output, format string) error {
+func writeRulesOutput(cmd *cobra.Command, r *comments.SuggestRulesResult, output, format string, exporter cmdutil.Exporter) error {
 	w := cmd.OutOrStdout()
 	if output != "" {
 		f, err := os.OpenFile(output, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
@@ -117,15 +122,16 @@ func writeRulesOutput(cmd *cobra.Command, r *commentspkg.SuggestRulesResult, out
 		defer f.Close()
 		w = f
 	}
-	switch format {
-	case "json":
+	if exporter != nil {
 		enc := json.NewEncoder(w)
 		enc.SetIndent("", "  ")
 		return enc.Encode(r)
+	}
+	switch format {
 	case "markdown":
-		report := &commentspkg.Report{Dataset: r.Dataset, Rules: r, Stats: map[string]*commentspkg.StatsResult{}}
-		return commentspkg.WriteReportMarkdown(w, report)
-	case "text", "":
+		report := &comments.Report{Dataset: r.Dataset, Rules: r, Stats: map[string]*comments.StatsResult{}}
+		return comments.WriteReportMarkdown(w, report)
+	default:
 		fmt.Fprintf(w, "Dataset: %s\n", r.Dataset)
 		fmt.Fprintf(w, "Topics evaluated: %d\n", r.Topics)
 		fmt.Fprintf(w, "Candidates: %d\n", len(r.Candidates))
@@ -141,7 +147,5 @@ func writeRulesOutput(cmd *cobra.Command, r *commentspkg.SuggestRulesResult, out
 			}
 		}
 		return nil
-	default:
-		return fmt.Errorf("unknown --format %q (allowed: text, json, markdown)", format)
 	}
 }

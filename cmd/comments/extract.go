@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	commentspkg "github.com/srz-zumix/gh-review-kit/pkg/comments"
+	"github.com/srz-zumix/gh-review-kit/pkg/comments"
 	"github.com/srz-zumix/go-gh-extension/pkg/gh"
 	"github.com/srz-zumix/go-gh-extension/pkg/parser"
 )
@@ -69,12 +69,12 @@ applied by default; pass --no-redact to opt out.`,
 			if err != nil {
 				return err
 			}
-			types, err := commentspkg.CommentTypesFromStrings(commentTypes)
+			types, err := comments.CommentTypesFromStrings(commentTypes)
 			if err != nil {
 				return fmt.Errorf("invalid --comment-types: %w", err)
 			}
 
-			filters := commentspkg.Filters{
+			filters := comments.Filters{
 				Repos:        []string{repository.Owner + "/" + repository.Name},
 				State:        state,
 				MergedOnly:   mergedOnly,
@@ -89,13 +89,13 @@ applied by default; pass --no-redact to opt out.`,
 				NoRedact:     noRedact,
 			}
 
-			ds, err := commentspkg.OpenDataset(dataset, filters)
+			ds, err := comments.OpenDataset(dataset, filters)
 			if err != nil {
 				return fmt.Errorf("failed to open dataset %q: %w", dataset, err)
 			}
 			defer ds.Close()
 
-			opts := commentspkg.ExtractOptions{
+			opts := comments.ExtractOptions{
 				Repo:         repository,
 				State:        state,
 				MergedOnly:   mergedOnly,
@@ -112,10 +112,10 @@ applied by default; pass --no-redact to opt out.`,
 			}
 
 			ctx := context.Background()
-			if err := commentspkg.Extract(ctx, client, ds, opts); err != nil {
+			if err := comments.Extract(ctx, client, ds, opts); err != nil {
 				return fmt.Errorf("failed to extract comments: %w", err)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Wrote dataset to %s\n", commentspkg.AbsDataset(dataset))
+			fmt.Fprintf(cmd.OutOrStdout(), "Wrote dataset to %s\n", comments.AbsDataset(dataset))
 			return nil
 		},
 	}
@@ -150,7 +150,7 @@ func parseTimeFlag(name, value string) (*time.Time, error) {
 	return &t, nil
 }
 
-func stringifyTypes(types []commentspkg.CommentType) []string {
+func stringifyTypes(types []comments.CommentType) []string {
 	out := make([]string, 0, len(types))
 	for _, t := range types {
 		out = append(out, string(t))

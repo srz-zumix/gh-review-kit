@@ -1,12 +1,13 @@
 package comments
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 
+	"github.com/cli/cli/v2/pkg/cmdutil"
 	"github.com/spf13/cobra"
-	commentspkg "github.com/srz-zumix/gh-review-kit/pkg/comments"
+	"github.com/srz-zumix/gh-review-kit/pkg/comments"
+	"github.com/srz-zumix/go-gh-extension/pkg/render"
 )
 
 // NewBundleCmd creates the 'comments bundle' command.
@@ -25,7 +26,7 @@ func NewBundleCmd() *cobra.Command {
 		untilFlag    string
 		minLength    int
 		includeBots  bool
-		format       string
+		exporter     cmdutil.Exporter
 	)
 
 	cmd := &cobra.Command{
@@ -54,16 +55,16 @@ record count, and byte size for reproducibility.`,
 			if err != nil {
 				return err
 			}
-			types, err := commentspkg.CommentTypesFromStrings(commentTypes)
+			types, err := comments.CommentTypesFromStrings(commentTypes)
 			if err != nil {
 				return fmt.Errorf("invalid --comment-types: %w", err)
 			}
-			opts := commentspkg.BundleOptions{
+			opts := comments.BundleOptions{
 				OutputDir:  outputDir,
 				GroupBy:    groupBy,
 				MaxRecords: maxRecords,
 				MaxBytes:   maxBytes,
-				Filters: commentspkg.SampleFilters{
+				Filters: comments.SampleFilters{
 					CommentTypes: types,
 					ReviewStates: bundleNormalizeStates(reviewStates),
 					Authors:      authors,
@@ -74,22 +75,20 @@ record count, and byte size for reproducibility.`,
 					IncludeBots:  includeBots,
 				},
 			}
-			manifest, err := commentspkg.Bundle(dataset, opts)
+			manifest, err := comments.Bundle(dataset, opts)
 			if err != nil {
 				return fmt.Errorf("failed to bundle dataset %q: %w", dataset, err)
 			}
-			out := cmd.OutOrStdout()
-			if format == "json" {
-				enc := json.NewEncoder(out)
-				enc.SetIndent("", "  ")
-				return enc.Encode(manifest)
+			r := render.NewRenderer(exporter)
+			if r.HasExporter() {
+				return r.RenderExportedData(manifest)
 			}
-			fmt.Fprintf(out, "Wrote %d bundle(s) to %s\n", len(manifest.Bundles), outputDir)
+			r.WriteLine(fmt.Sprintf("Wrote %d bundle(s) to %s", len(manifest.Bundles), outputDir))
 			for _, b := range manifest.Bundles {
 				if b.Group != "" {
-					fmt.Fprintf(out, "  %s [%s] records=%d bytes=%d\n", b.File, b.Group, b.Records, b.Bytes)
+					r.WriteLine(fmt.Sprintf("  %s [%s] records=%d bytes=%d", b.File, b.Group, b.Records, b.Bytes))
 				} else {
-					fmt.Fprintf(out, "  %s records=%d bytes=%d\n", b.File, b.Records, b.Bytes)
+					r.WriteLine(fmt.Sprintf("  %s records=%d bytes=%d", b.File, b.Records, b.Bytes))
 				}
 			}
 			return nil
@@ -110,7 +109,7 @@ record count, and byte size for reproducibility.`,
 	f.StringVar(&untilFlag, "until", "", "Filter: created at or before this RFC3339 timestamp")
 	f.IntVar(&minLength, "min-length", 0, "Filter: minimum trimmed body length in bytes")
 	f.BoolVar(&includeBots, "include-bots", false, "Include bot-authored comments")
-	f.StringVar(&format, "format", "text", "Output format for the summary: text, json")
+	cmdutil.AddFormatFlags(cmd, &exporter)
 	return cmd
 }
 
