@@ -2,7 +2,6 @@ package comments
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/cli/cli/v2/pkg/cmdutil"
 	"github.com/spf13/cobra"
@@ -66,7 +65,7 @@ record count, and byte size for reproducibility.`,
 				MaxBytes:   maxBytes,
 				Filters: comments.SampleFilters{
 					CommentTypes: types,
-					ReviewStates: bundleNormalizeStates(reviewStates),
+					ReviewStates: normalizeStates(reviewStates),
 					Authors:      authors,
 					PathPrefixes: paths,
 					Since:        since,
@@ -111,15 +110,4 @@ record count, and byte size for reproducibility.`,
 	f.BoolVar(&includeBots, "include-bots", false, "Include bot-authored comments")
 	cmdutil.AddFormatFlags(cmd, &exporter)
 	return cmd
-}
-
-func bundleNormalizeStates(in []string) []string {
-	out := make([]string, 0, len(in))
-	for _, s := range in {
-		s = strings.TrimSpace(strings.ToUpper(s))
-		if s != "" {
-			out = append(out, s)
-		}
-	}
-	return out
 }

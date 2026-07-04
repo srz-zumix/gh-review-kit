@@ -24,6 +24,10 @@ func Validate(dir string) (*ValidationReport, error) {
 	r := &ValidationReport{}
 	seen := map[string]struct{}{}
 	prSeen := map[string]struct{}{}
+	// Referenced PR keys collected from comments so linkage can be verified
+	// after prSeen is fully populated by the PR pass below.
+	refCount := map[string]int{}
+	refComment := map[string]int64{}
 
 	if err := IterateComments(dir, func(c *Comment) error {
 		r.Comments++
@@ -38,6 +42,12 @@ func Validate(dir string) (*ValidationReport, error) {
 		}
 		if c.Repo == "" || c.PRNumber == 0 {
 			r.Issues = append(r.Issues, fmt.Sprintf("comment id=%d missing repo/pr linkage", c.ID))
+		} else {
+			key := prKey(c.Repo, c.PRNumber)
+			if _, ok := refComment[key]; !ok {
+				refComment[key] = c.ID
+			}
+			refCount[key]++
 		}
 		if c.CreatedAt.IsZero() {
 			r.Issues = append(r.Issues, fmt.Sprintf("comment id=%d missing created_at", c.ID))
@@ -61,7 +71,7 @@ func Validate(dir string) (*ValidationReport, error) {
 		if p.Repo == "" || p.Number == 0 {
 			r.Issues = append(r.Issues, "pr record missing repo/number")
 		}
-		key := fmt.Sprintf("%s|%d", p.Repo, p.Number)
+		key := prKey(p.Repo, p.Number)
 		if _, dup := prSeen[key]; dup {
 			r.Issues = append(r.Issues, fmt.Sprintf("duplicate pr %s", key))
 		}
@@ -70,7 +80,27 @@ func Validate(dir string) (*ValidationReport, error) {
 	}); err != nil {
 		return nil, err
 	}
+
+	// Verify each comment references a PR record present in prs.jsonl. One issue
+	// is reported per missing PR (deduped), sorted for deterministic output.
+	missing := make([]string, 0)
+	for key := range refCount {
+		if _, ok := prSeen[key]; !ok {
+			missing = append(missing, key)
+		}
+	}
+	sort.Strings(missing)
+	for _, key := range missing {
+		r.Issues = append(r.Issues, fmt.Sprintf("comment id=%d references missing pr %s (%d comment(s))", refComment[key], key, refCount[key]))
+	}
 	return r, nil
+}
+
+// prKey builds the canonical "repo|number" key used to link comments to PR
+// records. Callers must use the exact repo string (no case normalization) so it
+// matches how other commands join comments and PRs.
+func prKey(repo string, number int) string {
+	return fmt.Sprintf("%s|%d", repo, number)
 }
 
 // StatsOptions configures Stats.

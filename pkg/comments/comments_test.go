@@ -90,3 +90,47 @@ func TestDatasetAppendValidateStats(t *testing.T) {
 		t.Fatal("temp dir base unexpectedly empty")
 	}
 }
+
+func TestValidateFlagsMissingPRLinkage(t *testing.T) {
+	dir := t.TempDir()
+	ds, err := OpenDataset(dir, Filters{Repos: []string{"o/r"}})
+	if err != nil {
+		t.Fatalf("OpenDataset: %v", err)
+	}
+	now := time.Now().UTC()
+	// Only PR #1 is recorded.
+	if err := ds.AppendPR(&PR{Repo: "o/r", Number: 1, Title: "t", URL: "u", State: "closed", CreatedAt: now, UpdatedAt: now}); err != nil {
+		t.Fatalf("AppendPR: %v", err)
+	}
+	// One comment links to the existing PR #1.
+	if err := ds.AppendComment(&Comment{ID: 10, Type: CommentTypeReviewBody, Repo: "o/r", PRNumber: 1, Author: "alice", Body: "ok", CreatedAt: now}); err != nil {
+		t.Fatalf("AppendComment: %v", err)
+	}
+	// Two comments reference the missing PR #2 -> a single deduped issue.
+	if err := ds.AppendComment(&Comment{ID: 11, Type: CommentTypeReviewComment, Repo: "o/r", PRNumber: 2, Author: "bob", Body: "a", CreatedAt: now}); err != nil {
+		t.Fatalf("AppendComment: %v", err)
+	}
+	if err := ds.AppendComment(&Comment{ID: 12, Type: CommentTypeReviewComment, Repo: "o/r", PRNumber: 2, Author: "carol", Body: "b", CreatedAt: now}); err != nil {
+		t.Fatalf("AppendComment: %v", err)
+	}
+	if err := ds.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	report, err := Validate(dir)
+	if err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+	var linkageIssues []string
+	for _, issue := range report.Issues {
+		if strings.Contains(issue, "references missing pr") {
+			linkageIssues = append(linkageIssues, issue)
+		}
+	}
+	if len(linkageIssues) != 1 {
+		t.Fatalf("expected exactly 1 missing-pr issue, got %d: %v", len(linkageIssues), report.Issues)
+	}
+	if !strings.Contains(linkageIssues[0], "o/r|2") || !strings.Contains(linkageIssues[0], "2 comment(s)") {
+		t.Fatalf("unexpected linkage issue: %q", linkageIssues[0])
+	}
+}
