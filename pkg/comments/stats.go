@@ -75,7 +75,7 @@ func Validate(dir string) (*ValidationReport, error) {
 
 // StatsOptions configures Stats.
 type StatsOptions struct {
-	GroupBy  string // repo|author|reviewer|review_state|comment_type|path_prefix|label
+	GroupBy  string // repo|author|review_state|comment_type|path_prefix|label
 	Top      int
 	MinCount int
 	Filters  SampleFilters
@@ -199,7 +199,7 @@ func groupKeyFn(group string) (func(c *Comment, prLabels map[string][]string) []
 		return func(c *Comment, _ map[string][]string) []string { return []string{string(c.Type)} }, nil
 	case "repo":
 		return func(c *Comment, _ map[string][]string) []string { return []string{c.Repo} }, nil
-	case "author", "reviewer":
+	case "author":
 		return func(c *Comment, _ map[string][]string) []string { return []string{c.Author} }, nil
 	case "review_state":
 		return func(c *Comment, _ map[string][]string) []string {
