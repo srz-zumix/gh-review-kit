@@ -113,13 +113,13 @@ type StatsOptions struct {
 
 // StatRow is one aggregated row.
 type StatRow struct {
-	Key        string `json:"key"`
-	Count      int    `json:"count"`
-	Reviewers  int    `json:"reviewers,omitempty"`
-	Repos      int    `json:"repos,omitempty"`
-	Blocking   int    `json:"changes_requested,omitempty"`
+	Key        string  `json:"key"`
+	Count      int     `json:"count"`
+	Reviewers  int     `json:"reviewers,omitempty"`
+	Repos      int     `json:"repos,omitempty"`
+	Blocking   int     `json:"changes_requested,omitempty"`
 	BotShare   float64 `json:"bot_share,omitempty"`
-	ExampleURL string `json:"example_url,omitempty"`
+	ExampleURL string  `json:"example_url,omitempty"`
 }
 
 // StatsResult is the result of Stats.
@@ -166,7 +166,10 @@ func Stats(dir string, opts StatsOptions) (*StatsResult, error) {
 		keys := keyFn(c, prLabels)
 		for _, k := range keys {
 			if k == "" {
-				continue
+				// Bucket records with empty metadata (e.g. missing author) as
+				// "(none)" instead of dropping them, matching how review_state
+				// and label groupings already handle empties.
+				k = "(none)"
 			}
 			acc, ok := groups[k]
 			if !ok {

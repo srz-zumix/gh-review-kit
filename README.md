@@ -326,6 +326,8 @@ Strategies:
 - `blocking`: only `review_state=CHANGES_REQUESTED`, then recent
 - `random`: random with `--seed` (deterministic when seeded)
 
+> **Note:** `review_state` is populated for `review_body` and `review_comment` records. Datasets extracted before inline `review_state` support may lack it on `review_comment` records; re-extract (recreate or purge affected PRs) for accurate `blocking` / `--review-states` results.
+
 **Options:**
 
 - `--authors`: Filter by authors (optional)

@@ -134,3 +134,44 @@ func TestValidateFlagsMissingPRLinkage(t *testing.T) {
 		t.Fatalf("unexpected linkage issue: %q", linkageIssues[0])
 	}
 }
+
+func TestStatsBucketsEmptyKeyAsNone(t *testing.T) {
+	dir := t.TempDir()
+	ds, err := OpenDataset(dir, Filters{Repos: []string{"o/r"}})
+	if err != nil {
+		t.Fatalf("OpenDataset: %v", err)
+	}
+	now := time.Now().UTC()
+	if err := ds.AppendPR(&PR{Repo: "o/r", Number: 1, CreatedAt: now, UpdatedAt: now}); err != nil {
+		t.Fatalf("AppendPR: %v", err)
+	}
+	// One comment with a known author, one with an empty author.
+	if err := ds.AppendComment(&Comment{ID: 1, Type: CommentTypeReviewBody, Repo: "o/r", PRNumber: 1, Author: "alice", Body: "a", CreatedAt: now}); err != nil {
+		t.Fatalf("AppendComment: %v", err)
+	}
+	if err := ds.AppendComment(&Comment{ID: 2, Type: CommentTypeIssueComment, Repo: "o/r", PRNumber: 1, Author: "", Body: "b", CreatedAt: now}); err != nil {
+		t.Fatalf("AppendComment: %v", err)
+	}
+	if err := ds.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	res, err := Stats(dir, StatsOptions{GroupBy: "author"})
+	if err != nil {
+		t.Fatalf("Stats: %v", err)
+	}
+	var none *StatRow
+	total := 0
+	for i := range res.Rows {
+		total += res.Rows[i].Count
+		if res.Rows[i].Key == "(none)" {
+			none = &res.Rows[i]
+		}
+	}
+	if total != 2 {
+		t.Fatalf("expected 2 records counted (no dropping), got %d", total)
+	}
+	if none == nil || none.Count != 1 {
+		t.Fatalf("expected a (none) bucket with count 1, got %+v", res.Rows)
+	}
+}

@@ -130,11 +130,24 @@ func extractOnePR(ctx context.Context, client *gh.GitHubClient, ds *Dataset, rep
 	// only after a successful write.
 	var comments []*Comment
 
-	if commentTypes[CommentTypeReviewBody] {
-		reviews, err := gh.GetPullRequestReviews(ctx, client, repo, pr)
+	// Fetch reviews once when either review bodies or inline review comments are
+	// requested. The review ID -> state map lets inline review_comment records
+	// inherit their review's state (e.g. CHANGES_REQUESTED), which powers the
+	// blocking strategy and review-state filters.
+	var reviews []*github.PullRequestReview
+	reviewStates := map[int64]string{}
+	if commentTypes[CommentTypeReviewBody] || commentTypes[CommentTypeReviewComment] {
+		rv, err := gh.GetPullRequestReviews(ctx, client, repo, pr)
 		if err != nil {
 			return fmt.Errorf("failed to get reviews: %w", err)
 		}
+		reviews = rv
+		for _, r := range reviews {
+			reviewStates[r.GetID()] = r.GetState()
+		}
+	}
+
+	if commentTypes[CommentTypeReviewBody] {
 		for _, rv := range reviews {
 			if rec := toReviewBodyRecord(repoKey, pr, rv, opts); rec != nil {
 				comments = append(comments, rec)
@@ -148,7 +161,7 @@ func extractOnePR(ctx context.Context, client *gh.GitHubClient, ds *Dataset, rep
 			return fmt.Errorf("failed to list review comments: %w", err)
 		}
 		for _, c := range rc {
-			if rec := toReviewCommentRecord(repoKey, pr, c, opts); rec != nil {
+			if rec := toReviewCommentRecord(repoKey, pr, c, reviewStates, opts); rec != nil {
 				comments = append(comments, rec)
 			}
 		}
@@ -286,7 +299,7 @@ func toReviewBodyRecord(repoKey string, pr *github.PullRequest, rv *github.PullR
 	}
 }
 
-func toReviewCommentRecord(repoKey string, pr *github.PullRequest, c *github.PullRequestComment, opts ExtractOptions) *Comment {
+func toReviewCommentRecord(repoKey string, pr *github.PullRequest, c *github.PullRequestComment, reviewStates map[int64]string, opts ExtractOptions) *Comment {
 	if !opts.IncludeBots && isBotUser(c.GetUser()) {
 		return nil
 	}
@@ -310,6 +323,7 @@ func toReviewCommentRecord(repoKey string, pr *github.PullRequest, c *github.Pul
 		URL:          c.GetHTMLURL(),
 		CreatedAt:    c.GetCreatedAt().Time,
 		ReviewID:     c.GetPullRequestReviewID(),
+		ReviewState:  reviewStates[c.GetPullRequestReviewID()],
 		Path:         c.GetPath(),
 		Line:         c.GetLine(),
 		OriginalLine: c.GetOriginalLine(),

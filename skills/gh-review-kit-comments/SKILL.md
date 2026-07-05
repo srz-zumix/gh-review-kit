@@ -293,6 +293,8 @@ gh review-kit comments sample --dataset DIR [flags]
 | `--strategy` | Selection strategy: `recent`, `diverse-authors`, `blocking`, `random` (default: `recent`) |
 | `--until` | Created at or before this RFC3339 timestamp |
 
+> **Note:** `blocking` / `--review-states` rely on `review_state`, which is populated for both `review_body` and `review_comment` records. Datasets extracted before inline `review_state` support may lack it on `review_comment` records; re-extract affected PRs for accurate results.
+
 ### Examples
 
 ```bash
