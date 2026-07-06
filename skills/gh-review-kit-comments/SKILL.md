@@ -623,7 +623,7 @@ in the input.
 </candidates>
 ```
 
-### Prompt Template 3 \u2014 Review a new PR using a `bundle` shard as context
+### Prompt Template 3 — Review a new PR using a `bundle` shard as context
 
 Use after `gh review-kit comments bundle --group-by repo --max-bytes 500000 --output-dir ./bundles`.
 Pick the bundle whose `repo` matches the PR under review and pass it as historical context.
