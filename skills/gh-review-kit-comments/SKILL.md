@@ -649,7 +649,7 @@ Do not invent issues that aren't supported by either the diff or <history>.
 </diff>
 ```
 
-### Prompt Template 4 \u2014 Summarize the Markdown report for a stakeholder
+### Prompt Template 4 — Summarize the Markdown report for a stakeholder
 
 Use after `gh review-kit comments report --output ./review-report.md`.
 
