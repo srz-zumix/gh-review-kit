@@ -577,7 +577,7 @@ comment with fields: id, type, repo, pr_number, author, body, review_state, path
 
 Task:
 1. Read every comment in <evidence>.
-2. Cluster them into 3\u201310 recurring review themes.
+2. Cluster them into 3–10 recurring review themes.
 3. For each theme, output:
    - title (imperative, <= 8 words, e.g. "Validate inputs at boundaries")
    - rule (1–2 sentences, actionable; written for a contributor, not a reviewer)
