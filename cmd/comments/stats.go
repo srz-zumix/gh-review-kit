@@ -6,6 +6,7 @@ import (
 	"github.com/cli/cli/v2/pkg/cmdutil"
 	"github.com/spf13/cobra"
 	"github.com/srz-zumix/gh-review-kit/pkg/comments"
+	"github.com/srz-zumix/go-gh-extension/pkg/cmdflags"
 	"github.com/srz-zumix/go-gh-extension/pkg/render"
 )
 
@@ -16,6 +17,7 @@ func NewStatsCmd() *cobra.Command {
 		groupBy  string
 		top      int
 		minCount int
+		format   string
 		exporter cmdutil.Exporter
 	)
 
@@ -53,6 +55,8 @@ ranked rows and --min-count to drop noise.`,
 	f.StringVar(&groupBy, "group-by", "comment_type", "Grouping key: comment_type, repo, author, review_state, path_prefix, label")
 	f.IntVar(&top, "top", 0, "Keep only the top N rows after sorting (0 = keep all)")
 	f.IntVar(&minCount, "min-count", 0, "Drop rows with fewer than this many records")
-	cmdutil.AddFormatFlags(cmd, &exporter)
+	if err := cmdflags.AddFormatFlags(cmd, &exporter, &format, "text", []string{"text"}); err != nil {
+		panic(err)
+	}
 	return cmd
 }

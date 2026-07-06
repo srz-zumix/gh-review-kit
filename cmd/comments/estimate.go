@@ -8,6 +8,7 @@ import (
 	"github.com/cli/cli/v2/pkg/cmdutil"
 	"github.com/spf13/cobra"
 	"github.com/srz-zumix/gh-review-kit/pkg/comments"
+	"github.com/srz-zumix/go-gh-extension/pkg/cmdflags"
 	"github.com/srz-zumix/go-gh-extension/pkg/gh"
 	"github.com/srz-zumix/go-gh-extension/pkg/parser"
 	"github.com/srz-zumix/go-gh-extension/pkg/render"
@@ -25,6 +26,7 @@ func NewEstimateCmd() *cobra.Command {
 		commentTypes []string
 		limit        int
 		sampleSize   int
+		format       string
 		exporter     cmdutil.Exporter
 	)
 
@@ -90,7 +92,9 @@ limits or running out of REST quota mid-run.`,
 	f.StringSliceVar(&commentTypes, "comment-types", nil, "Comment types to estimate (default: all). Allowed: review_body, review_comment, issue_comment")
 	f.IntVar(&limit, "limit", 0, "Cap PR count to consider (0 = no cap)")
 	f.IntVar(&sampleSize, "sample-size", 5, "Number of PRs to sample for averages")
-	cmdutil.AddFormatFlags(cmd, &exporter)
+	if err := cmdflags.AddFormatFlags(cmd, &exporter, &format, "text", []string{"text"}); err != nil {
+		panic(err)
+	}
 	return cmd
 }
 

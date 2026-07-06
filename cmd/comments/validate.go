@@ -6,6 +6,7 @@ import (
 	"github.com/cli/cli/v2/pkg/cmdutil"
 	"github.com/spf13/cobra"
 	"github.com/srz-zumix/gh-review-kit/pkg/comments"
+	"github.com/srz-zumix/go-gh-extension/pkg/cmdflags"
 	"github.com/srz-zumix/go-gh-extension/pkg/render"
 )
 
@@ -14,6 +15,7 @@ func NewValidateCmd() *cobra.Command {
 	var (
 		dataset  string
 		strict   bool
+		format   string
 		exporter cmdutil.Exporter
 	)
 
@@ -61,6 +63,8 @@ linkage. Use --strict to exit non-zero when any issue is reported.`,
 	f := cmd.Flags()
 	f.StringVar(&dataset, "dataset", "", "Dataset directory (required)")
 	f.BoolVar(&strict, "strict", false, "Exit non-zero when any issue is reported")
-	cmdutil.AddFormatFlags(cmd, &exporter)
+	if err := cmdflags.AddFormatFlags(cmd, &exporter, &format, "text", []string{"text"}); err != nil {
+		panic(err)
+	}
 	return cmd
 }

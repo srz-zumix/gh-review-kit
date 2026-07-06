@@ -6,6 +6,7 @@ import (
 	"github.com/cli/cli/v2/pkg/cmdutil"
 	"github.com/spf13/cobra"
 	"github.com/srz-zumix/gh-review-kit/pkg/comments"
+	"github.com/srz-zumix/go-gh-extension/pkg/cmdflags"
 	"github.com/srz-zumix/go-gh-extension/pkg/render"
 )
 
@@ -25,6 +26,7 @@ func NewBundleCmd() *cobra.Command {
 		untilFlag    string
 		minLength    int
 		includeBots  bool
+		format       string
 		exporter     cmdutil.Exporter
 	)
 
@@ -108,6 +110,8 @@ record count, and byte size for reproducibility.`,
 	f.StringVar(&untilFlag, "until", "", "Filter: created at or before this RFC3339 timestamp")
 	f.IntVar(&minLength, "min-length", 0, "Filter: minimum trimmed body length in bytes")
 	f.BoolVar(&includeBots, "include-bots", false, "Include bot-authored comments")
-	cmdutil.AddFormatFlags(cmd, &exporter)
+	if err := cmdflags.AddFormatFlags(cmd, &exporter, &format, "text", []string{"text"}); err != nil {
+		panic(err)
+	}
 	return cmd
 }

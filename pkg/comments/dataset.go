@@ -122,11 +122,12 @@ func (d *Dataset) PRUpdatedAt(repo string, number int) time.Time {
 
 // PurgePRs removes existing PR and comment records for the given PR numbers in
 // the given repo so they can be re-extracted. Buffered writers are flushed, the
-// JSONL files are rewritten via temp files that are only renamed into place once
-// BOTH have been fully staged (so a mid-rewrite failure leaves the original
-// files untouched), and the manifest counts as well as the checkpoint are
-// updated to reflect the removal. Returns the number of PR and comment records
-// that were dropped.
+// JSONL files are rewritten via temp files that are only committed once BOTH
+// have been fully staged. The commit moves the originals aside to .bak files
+// before swapping the temp files into place, so a failure part-way through the
+// commit is rolled back, keeping corpus and prs consistent with each other. The
+// manifest counts as well as the checkpoint are updated to reflect the removal.
+// Returns the number of PR and comment records that were dropped.
 func (d *Dataset) PurgePRs(repo string, numbers map[int]struct{}) (prsRemoved int, commentsRemoved Counts, err error) {
 	if len(numbers) == 0 {
 		return 0, Counts{}, nil
@@ -159,18 +160,47 @@ func (d *Dataset) PurgePRs(repo string, numbers map[int]struct{}) (prsRemoved in
 		return 0, Counts{}, err
 	}
 
-	// Both temp files are fully written; commit them by renaming into place.
+	// Both temp files are fully written; commit them together. Two independent
+	// renames cannot be a single atomic operation, so the originals are first
+	// moved aside to .bak files. This lets a failure while swapping either file
+	// be rolled back, keeping corpus and prs consistent with each other.
 	corpusPath := filepath.Join(d.Dir, FileCorpus)
 	prsPath := filepath.Join(d.Dir, FilePRs)
-	if err := os.Rename(corpusPath+".tmp", corpusPath); err != nil {
-		_ = os.Remove(prsPath + ".tmp")
+	corpusTmp, prsTmp := corpusPath+".tmp", prsPath+".tmp"
+	corpusBak, prsBak := corpusPath+".bak", prsPath+".bak"
+
+	if err := os.Rename(corpusPath, corpusBak); err != nil {
+		_ = os.Remove(corpusTmp)
+		_ = os.Remove(prsTmp)
+		_ = d.reopenAppendWriters()
+		return 0, Counts{}, fmt.Errorf("failed to stage corpus purge commit: %w", err)
+	}
+	if err := os.Rename(prsPath, prsBak); err != nil {
+		// Nothing has been swapped in yet; restore the corpus original.
+		_ = os.Rename(corpusBak, corpusPath)
+		_ = os.Remove(corpusTmp)
+		_ = os.Remove(prsTmp)
+		_ = d.reopenAppendWriters()
+		return 0, Counts{}, fmt.Errorf("failed to stage prs purge commit: %w", err)
+	}
+	if err := os.Rename(corpusTmp, corpusPath); err != nil {
+		// Restore both originals from their backups.
+		_ = os.Rename(corpusBak, corpusPath)
+		_ = os.Rename(prsBak, prsPath)
+		_ = os.Remove(prsTmp)
 		_ = d.reopenAppendWriters()
 		return 0, Counts{}, fmt.Errorf("failed to commit corpus purge: %w", err)
 	}
-	if err := os.Rename(prsPath+".tmp", prsPath); err != nil {
+	if err := os.Rename(prsTmp, prsPath); err != nil {
+		// Roll back the corpus swap and restore both originals.
+		_ = os.Rename(corpusBak, corpusPath)
+		_ = os.Rename(prsBak, prsPath)
 		_ = d.reopenAppendWriters()
 		return 0, Counts{}, fmt.Errorf("failed to commit prs purge: %w", err)
 	}
+	// Commit succeeded; drop the backups.
+	_ = os.Remove(corpusBak)
+	_ = os.Remove(prsBak)
 
 	d.manifest.Counts.PRs -= prsRemoved
 	d.manifest.Counts.ReviewBodies -= commentsRemoved.ReviewBodies
