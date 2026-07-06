@@ -567,7 +567,7 @@ A `Comment` JSONL record (corpus.jsonl, sample, bundle) has fields like:
 
 Tell the LLM about these fields once; afterwards it can cite `url` and `path` precisely.
 
-### Prompt Template 1 \u2014 Extract recurring rules from `sample` output
+### Prompt Template 1 — Extract recurring rules from `sample` output
 
 Use after `gh review-kit comments sample --strategy blocking --output ./evidence.jsonl`.
 
