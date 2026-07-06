@@ -611,7 +611,7 @@ Produce a Markdown guideline with sections:
 
 Each rule entry contains:
 - short imperative title
-- the rule itself in 1\u20133 sentences
+- the rule itself in 1–3 sentences
 - a 1-line rationale citing how often it was raised in review
 - one short example link (url) as evidence
 
