@@ -580,7 +580,7 @@ Task:
 2. Cluster them into 3\u201310 recurring review themes.
 3. For each theme, output:
    - title (imperative, <= 8 words, e.g. "Validate inputs at boundaries")
-   - rule (1\u20132 sentences, actionable; written for a contributor, not a reviewer)
+   - rule (1–2 sentences, actionable; written for a contributor, not a reviewer)
    - 3 representative quotes, each with the source url
    - rough frequency ("seen in N comments out of M")
 
