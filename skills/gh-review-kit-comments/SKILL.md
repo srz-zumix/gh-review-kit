@@ -594,7 +594,7 @@ Constraints:
 </evidence>
 ```
 
-### Prompt Template 2 \u2014 Promote `suggest-rules` output into a coding guideline
+### Prompt Template 2 — Promote `suggest-rules` output into a coding guideline
 
 Use after `gh review-kit comments suggest-rules --format json --output ./candidates.json`.
 
