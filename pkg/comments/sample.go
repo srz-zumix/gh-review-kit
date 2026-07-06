@@ -102,7 +102,7 @@ func Sample(dir string, opts SampleOptions) ([]*Comment, error) {
 		if seed == 0 {
 			seed = time.Now().UnixNano()
 		}
-		// nolint:gosec // sample selection is not security-sensitive
+		//nolint:gosec // sample selection is not security-sensitive
 		rng = rand.New(rand.NewPCG(uint64(seed), uint64(seed)^0x9E3779B97F4A7C15))
 	}
 
@@ -218,7 +218,31 @@ func sampleGroupFn(group string) (func(c *Comment, prLabels map[string][]string)
 	if group == "" {
 		return func(c *Comment, _ map[string][]string) []string { return []string{""} }, nil
 	}
-	return groupKeyFn(group)
+	fn, err := groupKeyFn(group)
+	if err != nil {
+		return nil, err
+	}
+	// Normalize empty group keys to "(none)" so sample/bundle self-describe
+	// missing-metadata groups consistently with Stats. Copy on replacement to
+	// avoid mutating shared slices (e.g. cached PR labels).
+	return func(c *Comment, prLabels map[string][]string) []string {
+		keys := fn(c, prLabels)
+		var out []string
+		for i, k := range keys {
+			if k == "" {
+				if out == nil {
+					out = append(out, keys[:i]...)
+				}
+				out = append(out, "(none)")
+			} else if out != nil {
+				out = append(out, k)
+			}
+		}
+		if out != nil {
+			return out
+		}
+		return keys
+	}, nil
 }
 
 func containsCT(set []CommentType, v CommentType) bool {

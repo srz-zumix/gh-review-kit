@@ -134,3 +134,68 @@ func TestBundleRequiresCap(t *testing.T) {
 		t.Fatal("expected error when neither --max-records nor --max-bytes is set")
 	}
 }
+
+func TestSampleGroupFnNormalizesEmptyKeys(t *testing.T) {
+	// No --group-by keeps the single global group ("" key).
+	fn, err := sampleGroupFn("")
+	if err != nil {
+		t.Fatalf("sampleGroupFn(\"\"): %v", err)
+	}
+	if got := fn(&Comment{}, nil); len(got) != 1 || got[0] != "" {
+		t.Fatalf("empty group: got %v want [\"\"]", got)
+	}
+
+	// Empty author is bucketed as "(none)".
+	fn, err = sampleGroupFn("author")
+	if err != nil {
+		t.Fatalf("sampleGroupFn(author): %v", err)
+	}
+	if got := fn(&Comment{Author: ""}, nil); len(got) != 1 || got[0] != "(none)" {
+		t.Fatalf("empty author: got %v want [\"(none)\"]", got)
+	}
+	if got := fn(&Comment{Author: "alice"}, nil); len(got) != 1 || got[0] != "alice" {
+		t.Fatalf("author: got %v want [\"alice\"]", got)
+	}
+
+	// path_prefix still yields no keys for comments without a path.
+	fn, err = sampleGroupFn("path_prefix")
+	if err != nil {
+		t.Fatalf("sampleGroupFn(path_prefix): %v", err)
+	}
+	if got := fn(&Comment{Path: ""}, nil); got != nil {
+		t.Fatalf("empty path: got %v want nil", got)
+	}
+}
+
+func TestBundleGroupByAuthorBucketsEmptyAuthor(t *testing.T) {
+	dir := t.TempDir()
+	ds, err := OpenDataset(dir, Filters{Repos: []string{"o/r"}})
+	if err != nil {
+		t.Fatalf("OpenDataset: %v", err)
+	}
+	base := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	_ = ds.AppendPR(&PR{Repo: "o/r", Number: 1, CreatedAt: base, UpdatedAt: base})
+	_ = ds.AppendComment(&Comment{ID: 1, Type: CommentTypeReviewBody, Repo: "o/r", PRNumber: 1, Author: "alice", Body: "a", CreatedAt: base, URL: "u1"})
+	_ = ds.AppendComment(&Comment{ID: 2, Type: CommentTypeIssueComment, Repo: "o/r", PRNumber: 1, Author: "", Body: "b", CreatedAt: base, URL: "u2"})
+	if err := ds.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	out := t.TempDir()
+	manifest, err := Bundle(dir, BundleOptions{OutputDir: out, GroupBy: "author", MaxRecords: 10})
+	if err != nil {
+		t.Fatalf("Bundle: %v", err)
+	}
+	var noneEntry *BundleEntry
+	for i := range manifest.Bundles {
+		if manifest.Bundles[i].Group == "(none)" {
+			noneEntry = &manifest.Bundles[i]
+		}
+	}
+	if noneEntry == nil {
+		t.Fatalf("expected a bundle with Group=(none), got %+v", manifest.Bundles)
+	}
+	if noneEntry.File == "bundle-0001.jsonl" {
+		t.Fatalf("empty-author bundle should not use the generic single-stream name, got %s", noneEntry.File)
+	}
+}

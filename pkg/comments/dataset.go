@@ -121,10 +121,12 @@ func (d *Dataset) PRUpdatedAt(repo string, number int) time.Time {
 }
 
 // PurgePRs removes existing PR and comment records for the given PR numbers in
-// the given repo so they can be re-extracted. Buffered writers are flushed,
-// the JSONL files are atomically rewritten, and the manifest counts as well as
-// the checkpoint are updated to reflect the removal. Returns the number of PR
-// and comment records that were dropped.
+// the given repo so they can be re-extracted. Buffered writers are flushed, the
+// JSONL files are rewritten via temp files that are only renamed into place once
+// BOTH have been fully staged (so a mid-rewrite failure leaves the original
+// files untouched), and the manifest counts as well as the checkpoint are
+// updated to reflect the removal. Returns the number of PR and comment records
+// that were dropped.
 func (d *Dataset) PurgePRs(repo string, numbers map[int]struct{}) (prsRemoved int, commentsRemoved Counts, err error) {
 	if len(numbers) == 0 {
 		return 0, Counts{}, nil
@@ -142,13 +144,32 @@ func (d *Dataset) PurgePRs(repo string, numbers map[int]struct{}) (prsRemoved in
 		return 0, Counts{}, fmt.Errorf("failed to close prs before purge: %w", err)
 	}
 
-	commentsRemoved, err = rewriteCorpus(d.Dir, repo, numbers)
+	commentsRemoved, err = stageCorpusPurge(d.Dir, repo, numbers)
 	if err != nil {
+		_ = os.Remove(filepath.Join(d.Dir, FileCorpus) + ".tmp")
+		_ = d.reopenAppendWriters()
 		return 0, Counts{}, err
 	}
-	prsRemoved, err = rewritePRs(d.Dir, repo, numbers)
+	prsRemoved, err = stagePRsPurge(d.Dir, repo, numbers)
 	if err != nil {
+		// Nothing has been committed yet; drop both staged files.
+		_ = os.Remove(filepath.Join(d.Dir, FileCorpus) + ".tmp")
+		_ = os.Remove(filepath.Join(d.Dir, FilePRs) + ".tmp")
+		_ = d.reopenAppendWriters()
 		return 0, Counts{}, err
+	}
+
+	// Both temp files are fully written; commit them by renaming into place.
+	corpusPath := filepath.Join(d.Dir, FileCorpus)
+	prsPath := filepath.Join(d.Dir, FilePRs)
+	if err := os.Rename(corpusPath+".tmp", corpusPath); err != nil {
+		_ = os.Remove(prsPath + ".tmp")
+		_ = d.reopenAppendWriters()
+		return 0, Counts{}, fmt.Errorf("failed to commit corpus purge: %w", err)
+	}
+	if err := os.Rename(prsPath+".tmp", prsPath); err != nil {
+		_ = d.reopenAppendWriters()
+		return 0, Counts{}, fmt.Errorf("failed to commit prs purge: %w", err)
 	}
 
 	d.manifest.Counts.PRs -= prsRemoved
@@ -157,23 +178,35 @@ func (d *Dataset) PurgePRs(repo string, numbers map[int]struct{}) (prsRemoved in
 	d.manifest.Counts.IssueComments -= commentsRemoved.IssueComments
 	d.checkpoint.removePRs(repo, numbers)
 
-	corpus, openErr := os.OpenFile(filepath.Join(d.Dir, FileCorpus), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
-	if openErr != nil {
-		return prsRemoved, commentsRemoved, fmt.Errorf("failed to reopen corpus after purge: %w", openErr)
+	if err := d.reopenAppendWriters(); err != nil {
+		return prsRemoved, commentsRemoved, err
 	}
-	prsFile, openErr := os.OpenFile(filepath.Join(d.Dir, FilePRs), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
-	if openErr != nil {
+	return prsRemoved, commentsRemoved, nil
+}
+
+// reopenAppendWriters reopens the corpus and prs files in append mode after a
+// purge (or a failed purge) so the Dataset remains usable for further writes.
+func (d *Dataset) reopenAppendWriters() error {
+	corpus, err := os.OpenFile(filepath.Join(d.Dir, FileCorpus), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return fmt.Errorf("failed to reopen corpus after purge: %w", err)
+	}
+	prsFile, err := os.OpenFile(filepath.Join(d.Dir, FilePRs), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
 		_ = corpus.Close()
-		return prsRemoved, commentsRemoved, fmt.Errorf("failed to reopen prs after purge: %w", openErr)
+		return fmt.Errorf("failed to reopen prs after purge: %w", err)
 	}
 	d.corpus = corpus
 	d.corpusW = bufio.NewWriter(corpus)
 	d.prs = prsFile
 	d.prsW = bufio.NewWriter(prsFile)
-	return prsRemoved, commentsRemoved, nil
+	return nil
 }
 
-func rewriteCorpus(dir, repo string, numbers map[int]struct{}) (Counts, error) {
+// stageCorpusPurge writes a purged copy of corpus.jsonl to corpus.jsonl.tmp
+// without renaming it into place, so the caller can commit corpus and prs
+// together only after both temp files are fully written.
+func stageCorpusPurge(dir, repo string, numbers map[int]struct{}) (Counts, error) {
 	src := filepath.Join(dir, FileCorpus)
 	tmp := src + ".tmp"
 	in, err := os.Open(src)
@@ -232,13 +265,12 @@ func rewriteCorpus(dir, repo string, numbers map[int]struct{}) (Counts, error) {
 	if err := out.Close(); err != nil {
 		return Counts{}, fmt.Errorf("failed to close corpus tmp: %w", err)
 	}
-	if err := os.Rename(tmp, src); err != nil {
-		return Counts{}, fmt.Errorf("failed to commit corpus purge: %w", err)
-	}
 	return removed, nil
 }
 
-func rewritePRs(dir, repo string, numbers map[int]struct{}) (int, error) {
+// stagePRsPurge writes a purged copy of prs.jsonl to prs.jsonl.tmp without
+// renaming it into place (see stageCorpusPurge).
+func stagePRsPurge(dir, repo string, numbers map[int]struct{}) (int, error) {
 	src := filepath.Join(dir, FilePRs)
 	tmp := src + ".tmp"
 	in, err := os.Open(src)
@@ -289,9 +321,6 @@ func rewritePRs(dir, repo string, numbers map[int]struct{}) (int, error) {
 	}
 	if err := out.Close(); err != nil {
 		return 0, fmt.Errorf("failed to close prs tmp: %w", err)
-	}
-	if err := os.Rename(tmp, src); err != nil {
-		return 0, fmt.Errorf("failed to commit prs purge: %w", err)
 	}
 	return removed, nil
 }
