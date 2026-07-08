@@ -164,6 +164,349 @@ gh review-kit checks failure 123 --no-required
 gh review-kit checks failure 123 --repo owner-name/repo-name
 ```
 
+### comments
+
+#### Preflight a comments extract: PR count, comment volume, API budget
+
+```sh
+gh review-kit comments estimate [--repo REPO] [--state STATE] [--merged] [--since RFC3339] [--until RFC3339] [--labels LABELS] [--comment-types TYPES] [--limit N] [--sample-size N] [--format FORMAT]
+```
+
+Estimate how much GitHub API work a future `comments extract` run with the same filters would consume. The command lists matching pull requests (cheap REST pagination), samples a small number of them to measure average comment volume per PR, and reports the projected total comments, projected API calls, and current rate-limit headroom. Use it before kicking off a large extraction to avoid hitting secondary rate limits or running out of REST quota mid-run.
+
+**Options:**
+
+- `--comment-types`: Comment types to estimate (optional, default: all). Allowed: `review_body`, `review_comment`, `issue_comment`
+- `--format`: Output format: `text`, `json` (optional, default: `text`)
+- `--labels`: Include only PRs that have at least one of the given labels (optional)
+- `--limit`: Cap PR count to consider (optional, default: 0 = no cap)
+- `--merged`: Include only merged pull requests (optional, default: false)
+- `--repo, -R`: Repository in the format 'owner/repo' (optional, defaults to current repository)
+- `--sample-size`: Number of PRs to sample for averages (optional, default: 5)
+- `--since`: Only include PRs updated at or after this RFC3339 timestamp (optional)
+- `--state`: PR state filter: `open`, `closed`, `all` (optional, default: `all`)
+- `--until`: Only include PRs created at or before this RFC3339 timestamp (optional)
+
+**Examples:**
+
+```sh
+# Quick estimate for the current repository
+gh review-kit comments estimate
+
+# Estimate a large repo's merged-only corpus, sampling 20 PRs for accuracy
+gh review-kit comments estimate --repo owner/repo --merged --sample-size 20
+
+# JSON for downstream tooling
+gh review-kit comments estimate --repo owner/repo --format json
+```
+
+#### Extract PR review feedback into a dataset
+
+```sh
+gh review-kit comments extract --dataset DIR [--repo REPO] [--state STATE] [--merged] [--since RFC3339] [--until RFC3339] [--labels LABELS] [--comment-types TYPES] [--include-bots] [--min-length N] [--path PREFIX] [--limit N] [--no-redact] [--update]
+```
+
+Extract pull request review feedback (review bodies, inline review comments, and PR issue comments) into a normalized JSONL dataset directory.
+
+The dataset directory is the unit shared by every `comments` subcommand and contains:
+
+- `corpus.jsonl`: one JSON record per comment
+- `prs.jsonl`: one JSON record per PR included in the dataset
+- `manifest.json`: filter parameters and running counts
+- `checkpoint.json`: completed PR numbers used to resume safely
+
+Re-running with the same `--dataset` resumes from the checkpoint and skips PRs already recorded. Pass `--update` to additionally re-fetch PRs whose `updated_at` advanced since the last run; their existing PR and comment records are atomically replaced. Conservative secret/token redaction is applied by default; pass `--no-redact` to opt out.
+
+**Options:**
+
+- `--comment-types`: Comment types to extract (optional, default: all). Allowed: `review_body`, `review_comment`, `issue_comment`
+- `--dataset`: Dataset directory (required)
+- `--include-bots`: Include comments authored by bot users (optional, default: false)
+- `--labels`: Include only PRs that have at least one of the given labels (optional)
+- `--limit`: Maximum number of new PRs to process this run (optional, default: 0 = no limit)
+- `--merged`: Include only merged pull requests (optional, default: false)
+- `--min-length`: Skip comments whose trimmed body is shorter than this many bytes (optional, default: 0)
+- `--no-redact`: Disable conservative secret/token redaction (optional, default: false)
+- `--path`: Restrict inline review comments to these path prefixes, repeatable (optional)
+- `--repo, -R`: Repository in the format 'owner/repo' (optional, defaults to current repository)
+- `--since`: Only include PRs updated at or after this RFC3339 timestamp (optional)
+- `--state`: PR state filter: `open`, `closed`, `all` (optional, default: `all`)
+- `--until`: Only include PRs created at or before this RFC3339 timestamp (optional)
+- `--update`: Re-fetch PRs whose `updated_at` advanced since the last run (optional, default: false)
+
+**Examples:**
+
+```sh
+# Extract all PR review feedback for a repository into ./dataset
+gh review-kit comments extract --repo owner/repo --dataset ./dataset
+
+# Resume an interrupted extraction (same --dataset)
+gh review-kit comments extract --repo owner/repo --dataset ./dataset
+
+# Refresh PRs whose updated_at advanced since the last run
+gh review-kit comments extract --repo owner/repo --dataset ./dataset --update
+
+# Only merged PRs updated since 2024-01-01, excluding bots
+gh review-kit comments extract --repo owner/repo --dataset ./dataset \
+  --merged --since 2024-01-01T00:00:00Z
+
+# Only inline review comments under src/ with at least 20 bytes of body
+gh review-kit comments extract --repo owner/repo --dataset ./dataset \
+  --comment-types review_comment --path src/ --min-length 20
+```
+
+#### Validate a comments dataset
+
+```sh
+gh review-kit comments validate --dataset DIR [--strict] [--format FORMAT]
+```
+
+Validate the schema and integrity of a comments dataset directory. Checks include schema version, required fields, duplicate IDs, and PR/comment linkage.
+
+**Options:**
+
+- `--dataset`: Dataset directory (required)
+- `--format`: Output format: `text`, `json` (optional, default: `text`)
+- `--strict`: Exit non-zero when any issue is reported (optional, default: false)
+
+**Examples:**
+
+```sh
+# Print a human-readable validation report
+gh review-kit comments validate --dataset ./dataset
+
+# Fail with a non-zero exit code on any issue
+gh review-kit comments validate --dataset ./dataset --strict
+
+# Emit JSON for downstream tooling
+gh review-kit comments validate --dataset ./dataset --format json
+```
+
+#### Aggregate counts over a comments dataset
+
+```sh
+gh review-kit comments stats --dataset DIR [--group-by KEY] [--top N] [--min-count N] [--format FORMAT]
+```
+
+Aggregate counts over a comments dataset and rank rows by frequency. Useful before LLM/Agent analysis to pick high-value slices instead of reading every record.
+
+**Options:**
+
+- `--dataset`: Dataset directory (required)
+- `--format`: Output format: `text`, `json` (optional, default: `text`)
+- `--group-by`: Grouping key: `comment_type`, `repo`, `author`, `review_state`, `path_prefix`, `label` (optional, default: `comment_type`)
+- `--min-count`: Drop rows with fewer than this many records (optional, default: 0)
+- `--top`: Keep only the top N rows after sorting (optional, default: 0 = keep all)
+
+**Examples:**
+
+```sh
+# Count records by type
+gh review-kit comments stats --dataset ./dataset
+
+# Top 20 reviewers by comment volume
+gh review-kit comments stats --dataset ./dataset --group-by author --top 20
+
+# Top path prefixes among inline comments, JSON output
+gh review-kit comments stats --dataset ./dataset --group-by path_prefix --top 30 --format json
+```
+
+#### Pick representative comments from a dataset
+
+```sh
+gh review-kit comments sample --dataset DIR [--group-by KEY] [--per-group N] [--strategy STRATEGY] [--seed N] [--output FILE] [--format FORMAT] [--comment-types TYPES] [--review-states STATES] [--authors AUTHORS] [--path PREFIX] [--since RFC3339] [--until RFC3339] [--min-length N] [--include-bots]
+```
+
+Pick representative comments from a comments dataset. Filters narrow the corpus, records are grouped by `--group-by`, and `--strategy` decides which `--per-group` records are kept per group. Useful for handing a small evidence set to an LLM/Agent.
+
+Strategies:
+
+- `recent`: newest first by `created_at` (default)
+- `diverse-authors`: newest record per distinct author until N
+- `blocking`: only `review_state=CHANGES_REQUESTED`, then recent
+- `random`: random with `--seed` (deterministic when seeded)
+
+> **Note:** `review_state` is populated for `review_body` and `review_comment` records. Datasets extracted before inline `review_state` support may lack it on `review_comment` records; re-extract (recreate or purge affected PRs) for accurate `blocking` / `--review-states` results.
+
+**Options:**
+
+- `--authors`: Filter by authors (optional)
+- `--comment-types`: Filter by comment types (optional). Allowed: `review_body`, `review_comment`, `issue_comment`
+- `--dataset`: Dataset directory (required)
+- `--format`: Output format: `jsonl`, `json` (optional, default: `jsonl`)
+- `--group-by`: Grouping key (optional, default: empty = single group). Allowed: `comment_type`, `repo`, `author`, `review_state`, `path_prefix`, `label`
+- `--include-bots`: Include bot-authored comments (optional, default: false)
+- `--min-length`: Minimum trimmed body length in bytes (optional, default: 0)
+- `--output`: Output file path (optional, default: stdout)
+- `--path`: Path prefixes for inline review comments, repeatable (optional)
+- `--per-group`: Records to keep per group (optional, default: 5)
+- `--review-states`: Filter by review states (optional). Allowed: `APPROVED`, `CHANGES_REQUESTED`, `COMMENTED`, `DISMISSED`
+- `--seed`: Random seed when `--strategy=random` (optional, default: 0 = time-based)
+- `--since`: Created at or after this RFC3339 timestamp (optional)
+- `--strategy`: Selection strategy (optional, default: `recent`). Allowed: `recent`, `diverse-authors`, `blocking`, `random`
+- `--until`: Created at or before this RFC3339 timestamp (optional)
+
+**Examples:**
+
+```sh
+# 5 most recent comments overall
+gh review-kit comments sample --dataset ./dataset
+
+# 3 representative comments per author, JSONL to stdout
+gh review-kit comments sample --dataset ./dataset --group-by author --per-group 3
+
+# Only blocking review feedback (CHANGES_REQUESTED), 10 per repo
+gh review-kit comments sample --dataset ./dataset \
+  --group-by repo --per-group 10 --strategy blocking
+
+# Diverse authors per path prefix under src/
+gh review-kit comments sample --dataset ./dataset \
+  --group-by path_prefix --per-group 5 --strategy diverse-authors --path src/
+
+# Deterministic random sample written to a file
+gh review-kit comments sample --dataset ./dataset \
+  --strategy random --seed 42 --per-group 50 --output ./samples.jsonl
+```
+
+#### Split a dataset into Agent-sized JSONL bundles
+
+```sh
+gh review-kit comments bundle --dataset DIR --output-dir DIR [--group-by KEY] [--max-records N] [--max-bytes N] [--comment-types TYPES] [--review-states STATES] [--authors AUTHORS] [--path PREFIX] [--since RFC3339] [--until RFC3339] [--min-length N] [--include-bots] [--format FORMAT]
+```
+
+Split a comments dataset into smaller JSONL bundles for parallel LLM/Agent analysis. Bundles are capped by `--max-records` and/or `--max-bytes`. A `manifest.json` next to the bundles records each file's group, record count, and byte size.
+
+**Options:**
+
+- `--authors`: Filter by authors (optional)
+- `--comment-types`: Filter by comment types (optional). Allowed: `review_body`, `review_comment`, `issue_comment`
+- `--dataset`: Dataset directory (required)
+- `--format`: Summary format: `text`, `json` (optional, default: `text`)
+- `--group-by`: Grouping key (optional, default: empty = single stream). Allowed: `comment_type`, `repo`, `author`, `review_state`, `path_prefix`, `label`
+- `--include-bots`: Include bot-authored comments (optional, default: false)
+- `--max-bytes`: Maximum bytes per bundle (optional, default: 0 = no byte cap)
+- `--max-records`: Maximum records per bundle (optional, default: 0 = no record cap)
+- `--min-length`: Minimum trimmed body length in bytes (optional, default: 0)
+- `--output-dir`: Directory to write bundle files (required)
+- `--path`: Path prefixes for inline review comments, repeatable (optional)
+- `--review-states`: Filter by review states (optional). Allowed: `APPROVED`, `CHANGES_REQUESTED`, `COMMENTED`, `DISMISSED`
+- `--since`: Created at or after this RFC3339 timestamp (optional)
+- `--until`: Created at or before this RFC3339 timestamp (optional)
+
+At least one of `--max-records` or `--max-bytes` must be set.
+
+**Examples:**
+
+```sh
+# 1000 records per bundle, single stream
+gh review-kit comments bundle --dataset ./dataset --output-dir ./bundles --max-records 1000
+
+# 500KB per bundle, grouped by repo so each Agent sees one repo at a time
+gh review-kit comments bundle --dataset ./dataset --output-dir ./bundles \
+  --max-bytes 500000 --group-by repo
+
+# Only blocking review feedback, grouped by path prefix
+gh review-kit comments bundle --dataset ./dataset --output-dir ./bundles \
+  --max-records 200 --group-by path_prefix --review-states CHANGES_REQUESTED
+```
+
+#### Rank candidate coding rules and review viewpoints
+
+```sh
+gh review-kit comments suggest-rules --dataset DIR [--topics-file FILE] [--min-count N] [--min-reviewers N] [--examples N] [--output FILE] [--format FORMAT] [--comment-types TYPES] [--review-states STATES] [--path PREFIX] [--since RFC3339] [--until RFC3339] [--min-length N] [--include-bots]
+```
+
+Rank deterministic candidate coding rules and review viewpoints inferred from the dataset.
+
+Topic detection is regex/keyword based and case-insensitive. Use the built-in dictionary that covers common review areas (naming, error handling, tests, security, performance, concurrency, style, logging, API design, comments and docs), or supply your own JSON dictionary via `--topics-file`. Each candidate is reported with frequency, distinct reviewers, distinct repos, blocking (`CHANGES_REQUESTED`) share, latest occurrence, and evidence URLs. No fuzzy clustering or embeddings are used; the output is reproducible.
+
+A topics file looks like:
+
+```json
+{
+  "topics": [
+    {
+      "name": "logging",
+      "description": "Structured logging conventions",
+      "patterns": ["\\bstructured log\\b", "\\blog level\\b"]
+    }
+  ]
+}
+```
+
+**Options:**
+
+- `--comment-types`: Filter by comment types (optional)
+- `--dataset`: Dataset directory (required)
+- `--examples`: Number of evidence examples to include per topic (optional, default: 3)
+- `--format`: Output format: `text`, `json`, `markdown` (optional, default: `text`)
+- `--include-bots`: Include bot-authored comments (optional, default: false)
+- `--min-count`: Drop topics matched fewer than this many times (optional, default: 3)
+- `--min-length`: Minimum trimmed body length in bytes (optional, default: 0)
+- `--min-reviewers`: Drop topics matched by fewer than this many distinct reviewers (optional, default: 2)
+- `--output`: Output file path (optional, default: stdout)
+- `--path`: Path prefixes for inline review comments, repeatable (optional)
+- `--review-states`: Filter by review states (optional)
+- `--since`: Created at or after this RFC3339 timestamp (optional)
+- `--topics-file`: JSON dictionary of topics (optional, default: built-in)
+- `--until`: Created at or before this RFC3339 timestamp (optional)
+
+**Examples:**
+
+```sh
+# Rank candidates with the built-in dictionary
+gh review-kit comments suggest-rules --dataset ./dataset
+
+# Use a custom topics file and emit JSON for downstream tooling
+gh review-kit comments suggest-rules --dataset ./dataset \
+  --topics-file ./topics.json --format json --output ./candidates.json
+
+# Only consider blocking review comments and require 3 distinct reviewers
+gh review-kit comments suggest-rules --dataset ./dataset \
+  --review-states CHANGES_REQUESTED --min-reviewers 3
+```
+
+#### Generate a Markdown/JSON report from a comments dataset
+
+```sh
+gh review-kit comments report --dataset DIR [--topics-file FILE] [--format FORMAT] [--output FILE] [--stats-top N] [--min-count N] [--min-reviewers N] [--examples N] [--comment-types TYPES] [--review-states STATES] [--path PREFIX] [--since RFC3339] [--until RFC3339] [--min-length N] [--include-bots]
+```
+
+Generate a deterministic Markdown or JSON report from a comments dataset. The report combines aggregate stats (by `comment_type`, `review_state`, `author`, `path_prefix`, `repo`) with rule candidates from `suggest-rules` and a manifest summary, so humans can review review-comment trends and sign off on which topics should become coding rules.
+
+**Options:**
+
+- `--comment-types`: Filter by comment types (optional)
+- `--dataset`: Dataset directory (required)
+- `--examples`: Number of evidence examples to include per topic (optional, default: 3)
+- `--format`: Output format: `markdown`, `json` (optional, default: `markdown`)
+- `--include-bots`: Include bot-authored comments (optional, default: false)
+- `--min-count`: Drop topics matched fewer than this many times (optional, default: 3)
+- `--min-length`: Minimum trimmed body length in bytes (optional, default: 0)
+- `--min-reviewers`: Drop topics matched by fewer than this many distinct reviewers (optional, default: 2)
+- `--output`: Output file path (optional, default: stdout)
+- `--path`: Path prefixes for inline review comments, repeatable (optional)
+- `--review-states`: Filter by review states (optional)
+- `--since`: Created at or after this RFC3339 timestamp (optional)
+- `--stats-top`: Top N rows per stats slice (optional, default: 20)
+- `--topics-file`: JSON dictionary of topics (optional, default: built-in)
+- `--until`: Created at or before this RFC3339 timestamp (optional)
+
+**Examples:**
+
+```sh
+# Markdown report to stdout
+gh review-kit comments report --dataset ./dataset
+
+# Save a Markdown report and a JSON report side by side
+gh review-kit comments report --dataset ./dataset --output ./report.md
+gh review-kit comments report --dataset ./dataset --format json --output ./report.json
+
+# Focus on blocking review feedback from the last 6 months
+gh review-kit comments report --dataset ./dataset \
+  --review-states CHANGES_REQUESTED --since 2025-10-01T00:00:00Z
+```
+
 ### Re-request review for a pull request
 
 ```sh
