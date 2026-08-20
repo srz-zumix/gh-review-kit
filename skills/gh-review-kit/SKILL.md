@@ -1,6 +1,6 @@
 ---
 name: gh-review-kit
-description: GitHub CLI extension (gh review-kit) for managing GitHub pull request reviews — including listing check runs with advanced filtering, displaying logs for failed checks, re-requesting reviews, and building/analyzing normalized datasets of PR review feedback for large-scale review-comment mining.
+description: GitHub CLI extension (gh review-kit) for managing GitHub pull request reviews — including listing check runs with advanced filtering, displaying logs for failed checks, re-requesting reviews, building/analyzing normalized datasets of PR review feedback for large-scale review-comment mining, and embedding Git provenance metadata into video files.
 ---
 
 # gh-review-kit
@@ -26,10 +26,13 @@ gh review-kit --version
 gh auth login
 ```
 
+The `attestation` command does not call the GitHub API and does not require GitHub authentication, but it does require a local Git repository plus `ffmpeg` and `ffprobe` on `PATH`.
+
 ## CLI Structure
 
 ```
 gh review-kit                       # Root command
+├── attestation                     # Embed Git provenance metadata into a video file
 ├── checks                          # Manage check runs for a pull request
 │   ├── list                        # List check runs for a pull request
 │   └── failure                     # Display logs for failed check runs
@@ -56,6 +59,47 @@ gh review-kit                       # Root command
 | `--log-level, -L` | Set log level: debug, info, warn, error (default: info) |
 | `--help, -h` | Show help for command |
 | `--version` | Show version |
+
+## Embed Git Provenance Metadata into a Video (attestation)
+
+Collect Git information (commit, branch, dirty state, commit date, and repository) from a local Git repository and embed it as global metadata tags into a copy of a video file. FFmpeg stream-copies all media without transcoding, preserving existing streams, metadata, and chapters on a best-effort basis. Embedded tags are verified with `ffprobe`; a container that cannot retain custom metadata keys produces warnings rather than a failure.
+
+This embeds unsigned provenance metadata only — it is not a cryptographic signature, GitHub artifact attestation, or tamper-proof claim. It does not call the GitHub API.
+
+```bash
+gh review-kit attestation <input-video> --output OUTPUT [flags]
+```
+
+### Options
+
+| Flag | Description |
+| --- | --- |
+| `--force` | Overwrite the output file if it already exists (default: false) |
+| `--output` | Output video file path (required) |
+| `--repo-dir` | Git repository directory to collect provenance from (default: current directory) |
+
+### Embedded Tags
+
+| Tag | Description |
+| --- | --- |
+| `git.branch` | Current branch name, or `detached` when HEAD is not on any branch |
+| `git.commit` | Full HEAD commit SHA |
+| `git.commit_date` | HEAD commit's committer date in RFC 3339 format |
+| `git.dirty` | `true` or `false`, based on tracked and untracked working tree changes |
+| `git.repository` | Credential-free `host/owner/repo`, or the top-level directory name if no `origin` remote is configured |
+
+### Examples
+
+```bash
+# Embed provenance from the current directory's repository
+gh review-kit attestation input.mp4 --output output.mp4
+
+# Collect provenance from a different repository directory
+gh review-kit attestation input.mp4 --output output.mp4 --repo-dir /path/to/repo
+
+# Overwrite an existing output file
+gh review-kit attestation input.mp4 --output output.mp4 --force
+```
 
 ## List Check Runs (checks list)
 

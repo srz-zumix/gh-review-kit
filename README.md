@@ -42,6 +42,47 @@ gh review-kit rerequest 123 --read-only
 
 ## Commands
 
+### Embed Git provenance metadata into a video
+
+```sh
+gh review-kit attestation <input-video> --output OUTPUT [--repo-dir DIR] [--force]
+```
+
+Collect Git information (commit, branch, dirty state, commit date, and repository) from a local Git repository and embed it as global metadata tags into a copy of the input video. FFmpeg stream-copies all media without transcoding, preserving existing streams, metadata, and chapters on a best-effort basis. The embedded tags are verified with `ffprobe` before the output file is written; a container that cannot retain custom metadata keys produces warnings rather than a failure.
+
+This embeds unsigned provenance metadata only. It is not a cryptographic signature, GitHub artifact attestation, or tamper-proof claim.
+
+Requires `ffmpeg` and `ffprobe` to be available on `PATH`.
+
+**Embedded tags:**
+
+| Tag | Description |
+| --- | --- |
+| `git.branch` | Current branch name, or `detached` when HEAD is not on any branch |
+| `git.commit` | Full HEAD commit SHA |
+| `git.commit_date` | HEAD commit's committer date in RFC 3339 format |
+| `git.dirty` | `true` or `false`, based on tracked and untracked working tree changes |
+| `git.repository` | Credential-free `host/owner/repo`, or the top-level directory name if no `origin` remote is configured |
+
+**Options:**
+
+- `--force`: Overwrite the output file if it already exists (optional, default: false)
+- `--output`: Output video file path (required)
+- `--repo-dir`: Git repository directory to collect provenance from (optional, default: current directory)
+
+**Examples:**
+
+```sh
+# Embed provenance from the current directory's repository
+gh review-kit attestation input.mp4 --output output.mp4
+
+# Collect provenance from a different repository directory
+gh review-kit attestation input.mp4 --output output.mp4 --repo-dir /path/to/repo
+
+# Overwrite an existing output file
+gh review-kit attestation input.mp4 --output output.mp4 --force
+```
+
 ### checks
 
 #### List check runs for a pull request
