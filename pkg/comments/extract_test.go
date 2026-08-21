@@ -3,7 +3,7 @@ package comments
 import (
 	"testing"
 
-	"github.com/google/go-github/v88/github"
+	"github.com/google/go-github/v90/github"
 )
 
 // toReviewCommentRecord must inherit the review_state of the review an inline
