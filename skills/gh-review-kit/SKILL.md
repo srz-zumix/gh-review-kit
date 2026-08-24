@@ -60,14 +60,14 @@ gh review-kit                       # Root command
 | `--help, -h` | Show help for command |
 | `--version` | Show version |
 
-## Embed Git Provenance Metadata into a Video (attestation)
+## Embed Git Provenance Metadata into a Video (attestation set)
 
 Collect Git information (commit, branch, dirty state, commit date, and repository) from a local Git repository and embed it as global metadata tags into a copy of a video file. FFmpeg stream-copies all media without transcoding, preserving existing streams, metadata, and chapters on a best-effort basis. Embedded tags are verified with `ffprobe`; a container that cannot retain custom metadata keys produces warnings rather than a failure.
 
 This embeds unsigned provenance metadata only — it is not a cryptographic signature, GitHub artifact attestation, or tamper-proof claim. It does not call the GitHub API.
 
 ```bash
-gh review-kit attestation <input-video> --output OUTPUT [flags]
+gh review-kit attestation set <input-video> -o OUTPUT [flags]
 ```
 
 ### Options
@@ -75,13 +75,15 @@ gh review-kit attestation <input-video> --output OUTPUT [flags]
 | Flag | Description |
 | --- | --- |
 | `--force` | Overwrite the output file if it already exists (default: false) |
-| `--output` | Output video file path (required) |
-| `--repo-dir` | Git repository directory to collect provenance from (default: current directory) |
+| `--format` | Output format: `text`, `json` (default: `text`) |
+| `-o`, `--output` | Output video file path (required) |
+| `-C`, `--repo-dir` | Git repository directory to collect provenance from (default: current directory) |
 
 ### Embedded Tags
 
 | Tag | Description |
 | --- | --- |
+| `git.author` | Identity of the user running the attestation command, in `Name <email>` format (from `git config user.name`/`user.email`) |
 | `git.branch` | Current branch name, or `detached` when HEAD is not on any branch |
 | `git.commit` | Full HEAD commit SHA |
 | `git.commit_date` | HEAD commit's committer date in RFC 3339 format |
@@ -92,13 +94,34 @@ gh review-kit attestation <input-video> --output OUTPUT [flags]
 
 ```bash
 # Embed provenance from the current directory's repository
-gh review-kit attestation input.mp4 --output output.mp4
+gh review-kit attestation set input.mp4 --output output.mp4
 
 # Collect provenance from a different repository directory
-gh review-kit attestation input.mp4 --output output.mp4 --repo-dir /path/to/repo
+gh review-kit attestation set input.mp4 --output output.mp4 -C /path/to/repo
 
 # Overwrite an existing output file
-gh review-kit attestation input.mp4 --output output.mp4 --force
+gh review-kit attestation set input.mp4 --output output.mp4 --force
+```
+
+## Display Git Provenance Metadata Embedded in a Video (attestation view)
+
+Read the global metadata tags previously embedded by `attestation set` using `ffprobe`, without modifying the file.
+
+```bash
+gh review-kit attestation view <input-video> [flags]
+```
+
+### Options
+
+| Flag | Description |
+| --- | --- |
+| `--format` | Output format: `text`, `json` (default: `text`) |
+
+### Examples
+
+```bash
+# Display provenance metadata embedded in a video
+gh review-kit attestation view output.mp4
 ```
 
 ## List Check Runs (checks list)

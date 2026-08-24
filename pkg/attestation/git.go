@@ -29,6 +29,11 @@ const GitTagDirty = "git.dirty"
 // date in RFC 3339 format.
 const GitTagCommitDate = "git.commit_date"
 
+// GitTagAuthor is the metadata key holding the identity of the user running
+// the attestation command, in "Name <email>" format, as configured via
+// "git config user.name" and "git config user.email".
+const GitTagAuthor = "git.author"
+
 // GitTagRepository is the metadata key holding the credential-free
 // "host/owner/repo" identifier for the repository, or the top-level
 // directory name when no "origin" remote is configured.
@@ -45,6 +50,7 @@ type GitMetadata struct {
 	Branch     string
 	Dirty      bool
 	CommitDate time.Time
+	Author     string
 	Repository string
 }
 
@@ -61,6 +67,7 @@ func (m GitMetadata) Tags() []Tag {
 		{Key: GitTagBranch, Value: m.Branch},
 		{Key: GitTagDirty, Value: dirtyValue(m.Dirty)},
 		{Key: GitTagCommitDate, Value: m.CommitDate.Format(time.RFC3339)},
+		{Key: GitTagAuthor, Value: m.Author},
 		{Key: GitTagRepository, Value: m.Repository},
 	}
 }
@@ -102,6 +109,11 @@ func CollectGitMetadata(ctx context.Context, repoDir string) (*GitMetadata, erro
 		return nil, fmt.Errorf("failed to resolve HEAD commit date: %w", err)
 	}
 
+	author, err := currentGitUser(ctx, c)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve current git user: %w", err)
+	}
+
 	repo, err := repositoryIdentifier(ctx, c)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve repository identifier: %w", err)
@@ -112,6 +124,7 @@ func CollectGitMetadata(ctx context.Context, repoDir string) (*GitMetadata, erro
 		Branch:     branch,
 		Dirty:      dirty,
 		CommitDate: commitDate,
+		Author:     author,
 		Repository: repo,
 	}, nil
 }
@@ -185,6 +198,34 @@ func headCommitDate(ctx context.Context, c *git.Client) (time.Time, error) {
 		return time.Time{}, fmt.Errorf("failed to parse commit date %q: %w", value, err)
 	}
 	return t, nil
+}
+
+// currentGitUser returns the identity of the user running the attestation
+// command, in "Name <email>" format, as configured via "git config
+// user.name" and "git config user.email".
+func currentGitUser(ctx context.Context, c *git.Client) (string, error) {
+	name, err := gitConfigValue(ctx, c, "user.name")
+	if err != nil {
+		return "", err
+	}
+	email, err := gitConfigValue(ctx, c, "user.email")
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%s <%s>", name, email), nil
+}
+
+// gitConfigValue returns the value of a git config key.
+func gitConfigValue(ctx context.Context, c *git.Client, key string) (string, error) {
+	cmd, err := c.Command(ctx, "config", "--get", key)
+	if err != nil {
+		return "", err
+	}
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
 }
 
 // repositoryIdentifier returns the credential-free "host/owner/repo"

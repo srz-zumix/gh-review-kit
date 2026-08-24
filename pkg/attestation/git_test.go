@@ -30,6 +30,8 @@ func initRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	runGit(t, dir, "init", "-q", "-b", "main")
+	runGit(t, dir, "config", "user.name", "Test")
+	runGit(t, dir, "config", "user.email", "test@example.com")
 	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("hello\n"), 0o644); err != nil {
 		t.Fatalf("write file: %v", err)
 	}
@@ -208,10 +210,11 @@ func TestGitMetadataTagsOrderAndValues(t *testing.T) {
 		Commit:     "abc123",
 		Branch:     "main",
 		Dirty:      true,
+		Author:     "Jane Doe <jane@example.com>",
 		Repository: "github.com/owner/repo",
 	}
 	tags := meta.Tags()
-	wantKeys := []string{GitTagCommit, GitTagBranch, GitTagDirty, GitTagCommitDate, GitTagRepository}
+	wantKeys := []string{GitTagCommit, GitTagBranch, GitTagDirty, GitTagCommitDate, GitTagAuthor, GitTagRepository}
 	if len(tags) != len(wantKeys) {
 		t.Fatalf("got %d tags want %d", len(tags), len(wantKeys))
 	}

@@ -72,6 +72,7 @@ func sampleTags() []Tag {
 		{Key: GitTagBranch, Value: "main"},
 		{Key: GitTagDirty, Value: "false"},
 		{Key: GitTagCommitDate, Value: "2024-01-01T00:00:00Z"},
+		{Key: GitTagAuthor, Value: "Jane Doe <jane@example.com>"},
 		{Key: GitTagRepository, Value: "github.com/owner/repo"},
 	}
 }
@@ -96,6 +97,7 @@ func TestFfmpegArgsStreamCopyAndMetadata(t *testing.T) {
 		"-metadata git.branch=main",
 		"-metadata git.dirty=false",
 		"-metadata git.commit_date=2024-01-01T00:00:00Z",
+		"-metadata git.author=Jane Doe <jane@example.com>",
 		"-metadata git.repository=github.com/owner/repo",
 		"-movflags use_metadata_tags",
 	} {

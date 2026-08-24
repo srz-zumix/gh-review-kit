@@ -257,6 +257,76 @@ func verifyTags(ctx context.Context, runner commandRunner, ffprobePath, path str
 	return warnings, nil
 }
 
+// gitTagOrder lists the known Git provenance metadata keys, in the same
+// order as GitMetadata.Tags, so ReadGitMetadata reports them consistently.
+var gitTagOrder = []string{
+	GitTagCommit,
+	GitTagBranch,
+	GitTagDirty,
+	GitTagCommitDate,
+	GitTagAuthor,
+	GitTagRepository,
+}
+
+// ReadOptions configures ReadGitMetadata.
+type ReadOptions struct {
+	// Input is the path to the video file to inspect (required).
+	Input string
+}
+
+// ReadResult reports the Git provenance metadata found in a video file.
+type ReadResult struct {
+	// Tags is the ordered list of Git metadata tags found in the file.
+	Tags []Tag
+}
+
+// ReadGitMetadata reads the Git provenance metadata tags embedded in
+// opts.Input using ffprobe, without modifying the file.
+func ReadGitMetadata(ctx context.Context, opts ReadOptions) (*ReadResult, error) {
+	return readGitMetadata(ctx, opts, execCommandRunner{})
+}
+
+func readGitMetadata(ctx context.Context, opts ReadOptions, runner commandRunner) (*ReadResult, error) {
+	if opts.Input == "" {
+		return nil, fmt.Errorf("input path must not be empty")
+	}
+	if _, err := os.Stat(opts.Input); err != nil {
+		return nil, fmt.Errorf("failed to access input file %q: %w", opts.Input, err)
+	}
+
+	ffprobePath, err := runner.LookPath("ffprobe")
+	if err != nil {
+		return nil, fmt.Errorf("ffprobe is required but was not found on PATH: %w", err)
+	}
+
+	out, err := runner.Output(ctx, ffprobePath,
+		"-v", "quiet",
+		"-print_format", "json",
+		"-show_format",
+		opts.Input,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to probe %q: %w", opts.Input, err)
+	}
+
+	var probed ffprobeFormat
+	if err := json.Unmarshal(out, &probed); err != nil {
+		return nil, fmt.Errorf("failed to parse ffprobe output for %q: %w", opts.Input, err)
+	}
+
+	var tags []Tag
+	for _, key := range gitTagOrder {
+		if value, ok := probed.Format.Tags[key]; ok {
+			tags = append(tags, Tag{Key: key, Value: value})
+		}
+	}
+	if len(tags) == 0 {
+		return nil, fmt.Errorf("no git provenance metadata found in %q", opts.Input)
+	}
+
+	return &ReadResult{Tags: tags}, nil
+}
+
 // promoteOutput moves tmpPath to output. When force is set and output
 // already exists, the existing file is backed up first and restored if the
 // final rename fails, so a failure never destroys an existing output file.
