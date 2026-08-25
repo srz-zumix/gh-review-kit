@@ -124,10 +124,11 @@ func embedGitMetadata(ctx context.Context, opts EmbedOptions, runner commandRunn
 		os.Remove(tmpPath)
 		return nil, fmt.Errorf("failed to close temporary output file: %w", err)
 	}
-	// ffmpeg refuses to write to a pre-existing (empty) file without -y;
-	// remove the placeholder so ffmpeg creates it fresh, and always clean it
-	// up unless it has been promoted to the final output path.
-	os.Remove(tmpPath)
+	// Keep the securely created placeholder in place; ffmpegArgs always passes
+	// -y, so ffmpeg overwrites it. Removing it and letting ffmpeg recreate the
+	// path would open a window for another process to substitute a symlink at
+	// tmpPath, causing ffmpeg to follow it and overwrite an arbitrary file.
+	// The placeholder is cleaned up unless it is promoted to the output path.
 	cleanupTmp := true
 	defer func() {
 		if cleanupTmp {
@@ -190,6 +191,9 @@ func validateInputOutput(input, output string, force bool) error {
 		// promoteOutput overwrite the input itself.
 		if os.SameFile(info, outputInfo) {
 			return fmt.Errorf("output path %q must not be the same as the input path (in-place editing is not supported)", output)
+		}
+		if !outputInfo.Mode().IsRegular() {
+			return fmt.Errorf("output path %q exists and is not a regular file", output)
 		}
 		if !force {
 			return fmt.Errorf("output file %q already exists; use --force to overwrite", output)
@@ -353,6 +357,9 @@ func promoteOutput(input, tmpPath, output string, force bool) error {
 		if os.SameFile(inputInfo, outputInfo) {
 			return fmt.Errorf("output path %q must not be the same as the input path (in-place editing is not supported)", output)
 		}
+		if !outputInfo.Mode().IsRegular() {
+			return fmt.Errorf("output path %q exists and is not a regular file", output)
+		}
 	case errors.Is(statErr, os.ErrNotExist):
 		if err := os.Rename(tmpPath, output); err != nil {
 			return fmt.Errorf("failed to write output file %q: %w", output, err)
@@ -366,17 +373,30 @@ func promoteOutput(input, tmpPath, output string, force bool) error {
 		return fmt.Errorf("output file %q already exists; use --force to overwrite", output)
 	}
 
-	backupPath := output + ".attestation-bak"
+	// Back up the existing output into a private temporary directory on the
+	// same filesystem. A fixed backup name (e.g. output+".attestation-bak")
+	// could clobber an unrelated pre-existing file or, when it happens to
+	// equal the input path, overwrite and later remove the input itself.
+	// Renaming into a freshly created directory avoids both, and renaming to a
+	// nonexistent destination inside it does not rely on replace-on-rename
+	// semantics that are not portable across platforms.
+	backupDir, err := os.MkdirTemp(filepath.Dir(output), ".attestation-backup-*")
+	if err != nil {
+		return fmt.Errorf("failed to allocate backup directory for %q: %w", output, err)
+	}
+	backupPath := filepath.Join(backupDir, filepath.Base(output))
 	if err := os.Rename(output, backupPath); err != nil {
+		os.RemoveAll(backupDir)
 		return fmt.Errorf("failed to back up existing output file %q: %w", output, err)
 	}
 	if err := os.Rename(tmpPath, output); err != nil {
 		// Roll back: restore the original output file.
 		if rollbackErr := os.Rename(backupPath, output); rollbackErr != nil {
-			return fmt.Errorf("failed to write output file %q: %w (rollback also failed: %v)", output, err, rollbackErr)
+			return fmt.Errorf("failed to write output file %q: %w (rollback also failed, original preserved at %q: %v)", output, err, backupPath, rollbackErr)
 		}
+		os.RemoveAll(backupDir)
 		return fmt.Errorf("failed to write output file %q: %w", output, err)
 	}
-	os.Remove(backupPath)
+	os.RemoveAll(backupDir)
 	return nil
 }

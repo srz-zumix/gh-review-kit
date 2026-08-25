@@ -236,6 +236,20 @@ func TestValidateInputOutputMissingOutputDir(t *testing.T) {
 	}
 }
 
+func TestValidateInputOutputRejectsDirectoryOutput(t *testing.T) {
+	dir := t.TempDir()
+	in := filepath.Join(dir, "in.mp4")
+	writeFile(t, in, "data")
+	out := filepath.Join(dir, "out.mp4")
+	if err := os.Mkdir(out, 0o755); err != nil {
+		t.Fatalf("Mkdir: %v", err)
+	}
+
+	if err := validateInputOutput(in, out, true); err == nil {
+		t.Fatal("expected an error when output exists and is a directory, even with --force")
+	}
+}
+
 func TestPromoteOutputNoExistingFile(t *testing.T) {
 	dir := t.TempDir()
 	in := filepath.Join(dir, "in.mp4")
@@ -288,8 +302,50 @@ func TestPromoteOutputForceReplacesExisting(t *testing.T) {
 	}
 }
 
-func TestPromoteOutputRejectsSameFileAlias(t *testing.T) {
+func TestPromoteOutputForceDoesNotClobberFixedBackupName(t *testing.T) {
 	dir := t.TempDir()
+	in := filepath.Join(dir, "in.mp4")
+	tmp := filepath.Join(dir, "tmp.mp4")
+	out := filepath.Join(dir, "out.mp4")
+	// A file that the previous fixed-name backup scheme would have destroyed.
+	unrelatedBak := out + ".attestation-bak"
+	writeFile(t, in, "input-content")
+	writeFile(t, tmp, "new-content")
+	writeFile(t, out, "old-content")
+	writeFile(t, unrelatedBak, "precious")
+
+	if err := promoteOutput(in, tmp, out, true); err != nil {
+		t.Fatalf("promoteOutput: %v", err)
+	}
+	data, err := os.ReadFile(unrelatedBak)
+	if err != nil {
+		t.Fatalf("expected the unrelated backup file to be preserved: %v", err)
+	}
+	if string(data) != "precious" {
+		t.Fatalf("unrelated backup content = %q, want %q", data, "precious")
+	}
+}
+
+func TestPromoteOutputRejectsDirectoryOutput(t *testing.T) {
+	dir := t.TempDir()
+	in := filepath.Join(dir, "in.mp4")
+	tmp := filepath.Join(dir, "tmp.mp4")
+	out := filepath.Join(dir, "out.mp4")
+	writeFile(t, in, "input-content")
+	writeFile(t, tmp, "new-content")
+	if err := os.Mkdir(out, 0o755); err != nil {
+		t.Fatalf("Mkdir: %v", err)
+	}
+
+	if err := promoteOutput(in, tmp, out, true); err == nil {
+		t.Fatal("expected an error when the output path is an existing directory")
+	}
+	if info, err := os.Stat(out); err != nil || !info.IsDir() {
+		t.Fatalf("expected the output directory to be left intact, stat=%v err=%v", info, err)
+	}
+}
+
+func TestPromoteOutputRejectsSameFileAlias(t *testing.T) {	dir := t.TempDir()
 	in := filepath.Join(dir, "in.mp4")
 	tmp := filepath.Join(dir, "tmp.mp4")
 	alias := filepath.Join(dir, "alias.mp4")
