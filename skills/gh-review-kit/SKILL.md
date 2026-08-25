@@ -26,7 +26,7 @@ gh review-kit --version
 gh auth login
 ```
 
-The `attestation` command does not call the GitHub API and does not require GitHub authentication, but it does require a local Git repository plus `ffmpeg` and `ffprobe` on `PATH`.
+The `attestation set` command does not call the GitHub API or require GitHub authentication, but it does require a local Git repository plus `ffmpeg` and `ffprobe` on `PATH`. The `attestation view` command only requires `ffprobe` on `PATH`.
 
 ## CLI Structure
 
