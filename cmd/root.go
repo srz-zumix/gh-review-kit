@@ -12,6 +12,11 @@ import (
 	"github.com/srz-zumix/go-gh-extension/pkg/cmdflags"
 )
 
+var (
+	logLevel string
+	readOnly bool
+)
+
 var rootCmd = &cobra.Command{
 	Use:     "gh-review-kit",
 	Short:   "A tool to manage GitHub reviews",

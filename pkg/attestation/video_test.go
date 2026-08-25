@@ -238,11 +238,13 @@ func TestValidateInputOutputMissingOutputDir(t *testing.T) {
 
 func TestPromoteOutputNoExistingFile(t *testing.T) {
 	dir := t.TempDir()
+	in := filepath.Join(dir, "in.mp4")
 	tmp := filepath.Join(dir, "tmp.mp4")
 	out := filepath.Join(dir, "out.mp4")
+	writeFile(t, in, "input-content")
 	writeFile(t, tmp, "content")
 
-	if err := promoteOutput(tmp, out, false); err != nil {
+	if err := promoteOutput(in, tmp, out, false); err != nil {
 		t.Fatalf("promoteOutput: %v", err)
 	}
 	data, err := os.ReadFile(out)
@@ -259,12 +261,14 @@ func TestPromoteOutputNoExistingFile(t *testing.T) {
 
 func TestPromoteOutputForceReplacesExisting(t *testing.T) {
 	dir := t.TempDir()
+	in := filepath.Join(dir, "in.mp4")
 	tmp := filepath.Join(dir, "tmp.mp4")
 	out := filepath.Join(dir, "out.mp4")
+	writeFile(t, in, "input-content")
 	writeFile(t, tmp, "new-content")
 	writeFile(t, out, "old-content")
 
-	if err := promoteOutput(tmp, out, true); err != nil {
+	if err := promoteOutput(in, tmp, out, true); err != nil {
 		t.Fatalf("promoteOutput: %v", err)
 	}
 	data, err := os.ReadFile(out)
@@ -278,18 +282,37 @@ func TestPromoteOutputForceReplacesExisting(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadDir: %v", err)
 	}
-	if len(entries) != 1 {
-		t.Fatalf("expected only the final output file to remain, got %v", entries)
+	// The input file plus the final output file should remain.
+	if len(entries) != 2 {
+		t.Fatalf("expected only the input and final output files to remain, got %v", entries)
+	}
+}
+
+func TestPromoteOutputRejectsSameFileAlias(t *testing.T) {
+	dir := t.TempDir()
+	in := filepath.Join(dir, "in.mp4")
+	tmp := filepath.Join(dir, "tmp.mp4")
+	alias := filepath.Join(dir, "alias.mp4")
+	writeFile(t, in, "input-content")
+	writeFile(t, tmp, "new-content")
+	if err := os.Link(in, alias); err != nil {
+		t.Skipf("hard links not supported on this filesystem: %v", err)
+	}
+
+	if err := promoteOutput(in, tmp, alias, true); err == nil {
+		t.Fatal("expected an error when output is a hard link alias of input")
 	}
 }
 
 func TestPromoteOutputRollsBackOnFailedRename(t *testing.T) {
 	dir := t.TempDir()
+	in := filepath.Join(dir, "in.mp4")
 	tmp := filepath.Join(dir, "tmp.mp4")
 	out := filepath.Join(dir, "sub", "out.mp4")
 	if err := os.MkdirAll(filepath.Dir(out), 0o755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
+	writeFile(t, in, "input-content")
 	writeFile(t, tmp, "new-content")
 	writeFile(t, out, "old-content")
 
@@ -300,7 +323,7 @@ func TestPromoteOutputRollsBackOnFailedRename(t *testing.T) {
 		t.Fatalf("Remove: %v", err)
 	}
 
-	err := promoteOutput(tmp, out, true)
+	err := promoteOutput(in, tmp, out, true)
 	if err == nil {
 		t.Fatal("expected an error when the tmp file no longer exists")
 	}

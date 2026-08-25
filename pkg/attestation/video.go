@@ -144,7 +144,7 @@ func embedGitMetadata(ctx context.Context, opts EmbedOptions, runner commandRunn
 		return nil, fmt.Errorf("failed to verify embedded metadata: %w", err)
 	}
 
-	if err := promoteOutput(tmpPath, opts.Output, opts.Force); err != nil {
+	if err := promoteOutput(opts.Input, tmpPath, opts.Output, opts.Force); err != nil {
 		return nil, err
 	}
 	cleanupTmp = false
@@ -183,7 +183,14 @@ func validateInputOutput(input, output string, force bool) error {
 		return fmt.Errorf("output directory %q is not a directory", outputDir)
 	}
 
-	if _, err := os.Stat(output); err == nil {
+	if outputInfo, err := os.Stat(output); err == nil {
+		// os.SameFile detects aliases that the path string comparison above
+		// cannot, such as hard links, symlinks, and case-only variants on
+		// case-insensitive filesystems. This prevents --force from letting
+		// promoteOutput overwrite the input itself.
+		if os.SameFile(info, outputInfo) {
+			return fmt.Errorf("output path %q must not be the same as the input path (in-place editing is not supported)", output)
+		}
 		if !force {
 			return fmt.Errorf("output file %q already exists; use --force to overwrite", output)
 		}
@@ -330,22 +337,33 @@ func readGitMetadata(ctx context.Context, opts ReadOptions, runner commandRunner
 // promoteOutput moves tmpPath to output. When force is set and output
 // already exists, the existing file is backed up first and restored if the
 // final rename fails, so a failure never destroys an existing output file.
-func promoteOutput(tmpPath, output string, force bool) error {
-	if !force {
+// input is re-checked against output with os.SameFile immediately before the
+// destructive rename, since input and output may have become aliases (e.g.
+// via a hard link, symlink, or case-only rename) after validateInputOutput
+// ran and before the ffmpeg/ffprobe steps completed.
+func promoteOutput(input, tmpPath, output string, force bool) error {
+	inputInfo, err := os.Stat(input)
+	if err != nil {
+		return fmt.Errorf("failed to access input file %q: %w", input, err)
+	}
+
+	outputInfo, statErr := os.Stat(output)
+	switch {
+	case statErr == nil:
+		if os.SameFile(inputInfo, outputInfo) {
+			return fmt.Errorf("output path %q must not be the same as the input path (in-place editing is not supported)", output)
+		}
+	case errors.Is(statErr, os.ErrNotExist):
 		if err := os.Rename(tmpPath, output); err != nil {
 			return fmt.Errorf("failed to write output file %q: %w", output, err)
 		}
 		return nil
+	default:
+		return fmt.Errorf("failed to access output file %q: %w", output, statErr)
 	}
 
-	if _, err := os.Stat(output); err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			if err := os.Rename(tmpPath, output); err != nil {
-				return fmt.Errorf("failed to write output file %q: %w", output, err)
-			}
-			return nil
-		}
-		return fmt.Errorf("failed to access output file %q: %w", output, err)
+	if !force {
+		return fmt.Errorf("output file %q already exists; use --force to overwrite", output)
 	}
 
 	backupPath := output + ".attestation-bak"
