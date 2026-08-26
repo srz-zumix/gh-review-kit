@@ -268,8 +268,47 @@ func TestPromoteOutputNoExistingFile(t *testing.T) {
 	if string(data) != "content" {
 		t.Fatalf("output content = %q, want %q", data, "content")
 	}
-	if _, err := os.Stat(tmp); !os.IsNotExist(err) {
-		t.Fatalf("expected tmp file to be gone, stat err = %v", err)
+	// promoteOutput publishes without consuming tmp; the staging file is the
+	// caller's responsibility to clean up. It must still contain the content.
+	if _, err := os.Stat(tmp); err != nil {
+		t.Fatalf("expected tmp file to remain for the caller to clean up: %v", err)
+	}
+}
+
+func TestPublishNoReplaceCreatesOutput(t *testing.T) {
+	dir := t.TempDir()
+	tmp := filepath.Join(dir, "tmp.mp4")
+	out := filepath.Join(dir, "out.mp4")
+	writeFile(t, tmp, "content")
+
+	if err := publishNoReplace(tmp, out); err != nil {
+		t.Fatalf("publishNoReplace: %v", err)
+	}
+	data, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if string(data) != "content" {
+		t.Fatalf("output content = %q, want %q", data, "content")
+	}
+}
+
+func TestPublishNoReplaceRefusesExistingOutput(t *testing.T) {
+	dir := t.TempDir()
+	tmp := filepath.Join(dir, "tmp.mp4")
+	out := filepath.Join(dir, "out.mp4")
+	writeFile(t, tmp, "new-content")
+	writeFile(t, out, "existing-content")
+
+	if err := publishNoReplace(tmp, out); err == nil {
+		t.Fatal("expected an error when output already exists (no-replace publish)")
+	}
+	data, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if string(data) != "existing-content" {
+		t.Fatalf("expected the existing output to be preserved, got %q", data)
 	}
 }
 
@@ -345,7 +384,8 @@ func TestPromoteOutputRejectsDirectoryOutput(t *testing.T) {
 	}
 }
 
-func TestPromoteOutputRejectsSameFileAlias(t *testing.T) {	dir := t.TempDir()
+func TestPromoteOutputRejectsSameFileAlias(t *testing.T) {
+	dir := t.TempDir()
 	in := filepath.Join(dir, "in.mp4")
 	tmp := filepath.Join(dir, "tmp.mp4")
 	alias := filepath.Join(dir, "alias.mp4")
@@ -439,8 +479,8 @@ func TestEmbedGitMetadataEndToEndWithFakeRunner(t *testing.T) {
 		t.Fatalf("ReadDir: %v", err)
 	}
 	for _, e := range entries {
-		if strings.HasPrefix(e.Name(), "attestation-") {
-			t.Fatalf("unexpected leftover temp file: %s", e.Name())
+		if strings.Contains(e.Name(), "attestation") {
+			t.Fatalf("unexpected leftover temp entry: %s", e.Name())
 		}
 	}
 }
@@ -468,8 +508,8 @@ func TestEmbedGitMetadataFfmpegFailureLeavesNoTempFile(t *testing.T) {
 		t.Fatalf("ReadDir: %v", readErr)
 	}
 	for _, e := range entries {
-		if strings.HasPrefix(e.Name(), "attestation-") {
-			t.Fatalf("unexpected leftover temp file: %s", e.Name())
+		if strings.Contains(e.Name(), "attestation") {
+			t.Fatalf("unexpected leftover temp entry: %s", e.Name())
 		}
 	}
 }

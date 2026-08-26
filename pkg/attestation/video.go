@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -115,25 +116,28 @@ func embedGitMetadata(ctx context.Context, opts EmbedOptions, runner commandRunn
 
 	outputDir := filepath.Dir(opts.Output)
 	ext := filepath.Ext(opts.Output)
-	tmp, err := os.CreateTemp(outputDir, "attestation-*"+ext)
+	// Stage the ffmpeg output inside a private temporary directory (0700)
+	// created on the same filesystem as the final output. Writing the work
+	// file directly into the caller-controlled output directory would let
+	// another user unlink it and substitute a symlink before ffmpeg opens it;
+	// because ffmpeg is passed -y and follows the path, it could then write
+	// through the symlink to an unintended file. A private directory that only
+	// the owner can traverse closes that window on filesystems that honor Unix
+	// permissions, while keeping the file on the same filesystem for an atomic
+	// publish. It is not a defense against a privileged or same-user process
+	// able to mutate the output directory entry itself.
+	stageDir, err := os.MkdirTemp(outputDir, ".attestation-stage-*")
 	if err != nil {
-		return nil, fmt.Errorf("failed to create temporary output file: %w", err)
+		return nil, fmt.Errorf("failed to create temporary work directory: %w", err)
 	}
-	tmpPath := tmp.Name()
-	if err := tmp.Close(); err != nil {
-		os.Remove(tmpPath)
-		return nil, fmt.Errorf("failed to close temporary output file: %w", err)
-	}
-	// Keep the securely created placeholder in place; ffmpegArgs always passes
-	// -y, so ffmpeg overwrites it. Removing it and letting ffmpeg recreate the
-	// path would open a window for another process to substitute a symlink at
-	// tmpPath, causing ffmpeg to follow it and overwrite an arbitrary file.
-	// The placeholder is cleaned up unless it is promoted to the output path.
-	cleanupTmp := true
+	tmpPath := filepath.Join(stageDir, "video"+ext)
 	defer func() {
-		if cleanupTmp {
-			os.Remove(tmpPath)
-		}
+		// Best-effort cleanup. os.Remove (not RemoveAll) avoids recursively
+		// deleting a directory that may have been substituted in place of the
+		// staging directory. tmpPath may already be gone when it was renamed
+		// to the output path on the --force branch.
+		os.Remove(tmpPath)
+		os.Remove(stageDir)
 	}()
 
 	if _, err := runner.Output(ctx, ffmpegPath, ffmpegArgs(opts.Input, tmpPath, tags)...); err != nil {
@@ -148,7 +152,6 @@ func embedGitMetadata(ctx context.Context, opts EmbedOptions, runner commandRunn
 	if err := promoteOutput(opts.Input, tmpPath, opts.Output, opts.Force); err != nil {
 		return nil, err
 	}
-	cleanupTmp = false
 
 	return &EmbedResult{Output: opts.Output, Tags: tags, Warnings: warnings}, nil
 }
@@ -338,8 +341,55 @@ func readGitMetadata(ctx context.Context, opts ReadOptions, runner commandRunner
 	return &ReadResult{Tags: tags}, nil
 }
 
-// promoteOutput moves tmpPath to output. When force is set and output
-// already exists, the existing file is backed up first and restored if the
+// publishNoReplace writes the staged file at tmpPath to output without ever
+// replacing an existing file. It first attempts an atomic, zero-copy hard
+// link, which fails when output already exists. On filesystems that do not
+// support hard links (e.g. exFAT/FAT) it falls back to an exclusive
+// create-and-copy, which also refuses to overwrite an existing file. A
+// replacing rename is deliberately never used, since it would silently
+// overwrite a file created concurrently and violate the --force=false
+// contract. The caller remains responsible for cleaning up tmpPath.
+func publishNoReplace(tmpPath, output string) error {
+	if err := os.Link(tmpPath, output); err == nil {
+		return nil
+	} else if errors.Is(err, os.ErrExist) {
+		return fmt.Errorf("output file %q already exists; use --force to overwrite", output)
+	}
+
+	// Hard links are unsupported (or failed for another reason): fall back to
+	// an exclusive create so a concurrently created output is still not
+	// overwritten.
+	dst, err := os.OpenFile(output, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+	if err != nil {
+		if errors.Is(err, os.ErrExist) {
+			return fmt.Errorf("output file %q already exists; use --force to overwrite", output)
+		}
+		return fmt.Errorf("failed to write output file %q: %w", output, err)
+	}
+	src, err := os.Open(tmpPath)
+	if err != nil {
+		dst.Close()
+		os.Remove(output)
+		return fmt.Errorf("failed to read staged output file: %w", err)
+	}
+	_, copyErr := io.Copy(dst, src)
+	src.Close()
+	closeErr := dst.Close()
+	if copyErr != nil {
+		os.Remove(output)
+		return fmt.Errorf("failed to write output file %q: %w", output, copyErr)
+	}
+	if closeErr != nil {
+		os.Remove(output)
+		return fmt.Errorf("failed to write output file %q: %w", output, closeErr)
+	}
+	return nil
+}
+
+// promoteOutput publishes the staged file at tmpPath to output. When output
+// does not yet exist it is published with publishNoReplace so a --force=false
+// run never overwrites a file created concurrently. When output already exists
+// it requires force; the existing file is backed up first and restored if the
 // final rename fails, so a failure never destroys an existing output file.
 // input is re-checked against output with os.SameFile immediately before the
 // destructive rename, since input and output may have become aliases (e.g.
@@ -361,10 +411,10 @@ func promoteOutput(input, tmpPath, output string, force bool) error {
 			return fmt.Errorf("output path %q exists and is not a regular file", output)
 		}
 	case errors.Is(statErr, os.ErrNotExist):
-		if err := os.Rename(tmpPath, output); err != nil {
-			return fmt.Errorf("failed to write output file %q: %w", output, err)
-		}
-		return nil
+		// Publish without replacing a destination that may have been created
+		// concurrently after the existence check above, so a --force=false run
+		// never clobbers a racing writer's file.
+		return publishNoReplace(tmpPath, output)
 	default:
 		return fmt.Errorf("failed to access output file %q: %w", output, statErr)
 	}
