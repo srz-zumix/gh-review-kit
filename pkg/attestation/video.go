@@ -56,9 +56,9 @@ var movFamilyExtensions = map[string]bool{
 
 // EmbedOptions configures EmbedGitMetadata.
 type EmbedOptions struct {
-	// Input is the path to the source video file (required).
+	// Input is the path to the source video, PNG, or JPEG file (required).
 	Input string
-	// Output is the path to write the resulting video file to (required).
+	// Output is the path to write the resulting file to (required).
 	Output string
 	// RepoDir is the Git repository directory to collect provenance from.
 	// When empty, the current directory is used.
@@ -69,20 +69,21 @@ type EmbedOptions struct {
 
 // EmbedResult reports the outcome of EmbedGitMetadata.
 type EmbedResult struct {
-	// Output is the path of the written video file.
+	// Output is the path of the written file.
 	Output string
 	// Tags is the ordered list of Git metadata tags that were embedded.
 	Tags []Tag
-	// Warnings lists tags that ffprobe could not verify after embedding,
-	// e.g. because the output container does not support arbitrary custom
+	// Warnings lists tags that could not be verified after embedding, e.g.
+	// because the output container does not support arbitrary custom
 	// metadata keys. The command still succeeds when only warnings occur.
 	Warnings []string
 }
 
-// EmbedGitMetadata collects Git provenance from opts.RepoDir and embeds it as
-// global metadata tags into a copy of opts.Input written to opts.Output,
-// using FFmpeg to stream-copy all media without transcoding. The result is
-// verified with ffprobe before being promoted to opts.Output.
+// EmbedGitMetadata collects Git provenance from opts.RepoDir and embeds it
+// into a copy of opts.Input written to opts.Output. Video files are
+// stream-copied with FFmpeg without transcoding and verified with ffprobe;
+// PNG and JPEG files are embedded and verified directly, without
+// ffmpeg/ffprobe.
 func EmbedGitMetadata(ctx context.Context, opts EmbedOptions) (*EmbedResult, error) {
 	return embedGitMetadata(ctx, opts, execCommandRunner{})
 }
@@ -99,13 +100,23 @@ func embedGitMetadata(ctx context.Context, opts EmbedOptions, runner commandRunn
 		return nil, err
 	}
 
-	ffmpegPath, err := runner.LookPath("ffmpeg")
+	format, err := peekImageFormat(opts.Input)
 	if err != nil {
-		return nil, fmt.Errorf("ffmpeg is required but was not found on PATH: %w", err)
+		return nil, fmt.Errorf("failed to access input file %q: %w", opts.Input, err)
 	}
-	ffprobePath, err := runner.LookPath("ffprobe")
-	if err != nil {
-		return nil, fmt.Errorf("ffprobe is required but was not found on PATH: %w", err)
+
+	// Fail fast on missing ffmpeg/ffprobe before doing any other work, since
+	// they are required for the (more common) video path.
+	var ffmpegPath, ffprobePath string
+	if format == imageFormatUnknown {
+		ffmpegPath, err = runner.LookPath("ffmpeg")
+		if err != nil {
+			return nil, fmt.Errorf("ffmpeg is required but was not found on PATH: %w", err)
+		}
+		ffprobePath, err = runner.LookPath("ffprobe")
+		if err != nil {
+			return nil, fmt.Errorf("ffprobe is required but was not found on PATH: %w", err)
+		}
 	}
 
 	meta, err := CollectGitMetadata(ctx, opts.RepoDir)
@@ -116,16 +127,16 @@ func embedGitMetadata(ctx context.Context, opts EmbedOptions, runner commandRunn
 
 	outputDir := filepath.Dir(opts.Output)
 	ext := filepath.Ext(opts.Output)
-	// Stage the ffmpeg output inside a private temporary directory (0700)
-	// created on the same filesystem as the final output. Writing the work
-	// file directly into the caller-controlled output directory would let
-	// another user unlink it and substitute a symlink before ffmpeg opens it;
-	// because ffmpeg is passed -y and follows the path, it could then write
-	// through the symlink to an unintended file. A private directory that only
-	// the owner can traverse closes that window on filesystems that honor Unix
-	// permissions, while keeping the file on the same filesystem for an atomic
-	// publish. It is not a defense against a privileged or same-user process
-	// able to mutate the output directory entry itself.
+	// Stage the write inside a private temporary directory (0700) created on
+	// the same filesystem as the final output. Writing the work file
+	// directly into the caller-controlled output directory would let another
+	// user unlink it and substitute a symlink before it is opened for
+	// writing, which could then write through the symlink to an unintended
+	// file. A private directory that only the owner can traverse closes that
+	// window on filesystems that honor Unix permissions, while keeping the
+	// file on the same filesystem for an atomic publish. It is not a defense
+	// against a privileged or same-user process able to mutate the output
+	// directory entry itself.
 	stageDir, err := os.MkdirTemp(outputDir, ".attestation-stage-*")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create temporary work directory: %w", err)
@@ -140,13 +151,14 @@ func embedGitMetadata(ctx context.Context, opts EmbedOptions, runner commandRunn
 		os.Remove(stageDir)
 	}()
 
-	if _, err := runner.Output(ctx, ffmpegPath, ffmpegArgs(opts.Input, tmpPath, tags)...); err != nil {
-		return nil, fmt.Errorf("failed to embed git metadata into %q: %w", opts.Input, err)
+	var warnings []string
+	if format != imageFormatUnknown {
+		warnings, err = embedImageGitMetadata(opts.Input, tmpPath, format, tags)
+	} else {
+		warnings, err = embedVideoGitMetadata(ctx, runner, ffmpegPath, ffprobePath, opts.Input, tmpPath, tags)
 	}
-
-	warnings, err := verifyTags(ctx, runner, ffprobePath, tmpPath, tags)
 	if err != nil {
-		return nil, fmt.Errorf("failed to verify embedded metadata: %w", err)
+		return nil, err
 	}
 
 	if err := promoteOutput(opts.Input, tmpPath, opts.Output, opts.Force); err != nil {
@@ -155,6 +167,51 @@ func embedGitMetadata(ctx context.Context, opts EmbedOptions, runner commandRunn
 
 	return &EmbedResult{Output: opts.Output, Tags: tags, Warnings: warnings}, nil
 }
+
+// embedImageGitMetadata embeds tags into input's native image metadata
+// (PNG tEXt chunks or JPEG COM segments) and writes the result to tmpPath,
+// without invoking ffmpeg/ffprobe. It returns warnings for any tag that a
+// read-back of the written file does not confirm.
+func embedImageGitMetadata(input, tmpPath string, format imageFormat, tags []Tag) ([]string, error) {
+	data, err := os.ReadFile(input)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read input file %q: %w", input, err)
+	}
+
+	out, err := embedImageTags(format, data, tags)
+	if err != nil {
+		return nil, fmt.Errorf("failed to embed git metadata into %q: %w", input, err)
+	}
+	if err := os.WriteFile(tmpPath, out, 0o644); err != nil {
+		return nil, fmt.Errorf("failed to write temporary output file: %w", err)
+	}
+
+	readBack, err := readImageTags(format, out)
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify embedded metadata: %w", err)
+	}
+	got := make(map[string]string, len(readBack))
+	for _, tag := range readBack {
+		got[tag.Key] = tag.Value
+	}
+	return warningsForMismatch(tags, got), nil
+}
+
+// embedVideoGitMetadata embeds tags into input using ffmpeg to stream-copy
+// all media without transcoding into tmpPath, verified afterwards with
+// ffprobe.
+func embedVideoGitMetadata(ctx context.Context, runner commandRunner, ffmpegPath, ffprobePath, input, tmpPath string, tags []Tag) ([]string, error) {
+	if _, err := runner.Output(ctx, ffmpegPath, ffmpegArgs(input, tmpPath, tags)...); err != nil {
+		return nil, fmt.Errorf("failed to embed git metadata into %q: %w", input, err)
+	}
+
+	warnings, err := verifyTags(ctx, runner, ffprobePath, tmpPath, tags)
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify embedded metadata: %w", err)
+	}
+	return warnings, nil
+}
+
 
 // validateInputOutput checks that input is a usable source file, that input
 // and output are not the same file, and that output may be written given the
@@ -257,18 +314,7 @@ func verifyTags(ctx context.Context, runner commandRunner, ffprobePath, path str
 		return nil, fmt.Errorf("failed to parse ffprobe output: %w", err)
 	}
 
-	var warnings []string
-	for _, tag := range tags {
-		got, ok := probed.Format.Tags[tag.Key]
-		if !ok {
-			warnings = append(warnings, fmt.Sprintf("tag %q was not present in the output container after embedding", tag.Key))
-			continue
-		}
-		if got != tag.Value {
-			warnings = append(warnings, fmt.Sprintf("tag %q was rewritten by the output container: got %q want %q", tag.Key, got, tag.Value))
-		}
-	}
-	return warnings, nil
+	return warningsForMismatch(tags, probed.Format.Tags), nil
 }
 
 // gitTagOrder lists the known Git provenance metadata keys, in the same
@@ -284,18 +330,20 @@ var gitTagOrder = []string{
 
 // ReadOptions configures ReadGitMetadata.
 type ReadOptions struct {
-	// Input is the path to the video file to inspect (required).
+	// Input is the path to the video or image file to inspect (required).
 	Input string
 }
 
-// ReadResult reports the Git provenance metadata found in a video file.
+// ReadResult reports the Git provenance metadata found in a video or image
+// file.
 type ReadResult struct {
 	// Tags is the ordered list of Git metadata tags found in the file.
 	Tags []Tag
 }
 
 // ReadGitMetadata reads the Git provenance metadata tags embedded in
-// opts.Input using ffprobe, without modifying the file.
+// opts.Input, without modifying the file. Video files are probed with
+// ffprobe; PNG and JPEG files are read directly, without ffmpeg/ffprobe.
 func ReadGitMetadata(ctx context.Context, opts ReadOptions) (*ReadResult, error) {
 	return readGitMetadata(ctx, opts, execCommandRunner{})
 }
@@ -304,10 +352,38 @@ func readGitMetadata(ctx context.Context, opts ReadOptions, runner commandRunner
 	if opts.Input == "" {
 		return nil, fmt.Errorf("input path must not be empty")
 	}
-	if _, err := os.Stat(opts.Input); err != nil {
+
+	format, err := peekImageFormat(opts.Input)
+	if err != nil {
 		return nil, fmt.Errorf("failed to access input file %q: %w", opts.Input, err)
 	}
 
+	var tags []Tag
+	if format != imageFormatUnknown {
+		data, err := os.ReadFile(opts.Input)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read input file %q: %w", opts.Input, err)
+		}
+		tags, err = readImageTags(format, data)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read git metadata from %q: %w", opts.Input, err)
+		}
+	} else {
+		tags, err = readVideoGitMetadata(ctx, runner, opts.Input)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if len(tags) == 0 {
+		return nil, fmt.Errorf("no git provenance metadata found in %q", opts.Input)
+	}
+	return &ReadResult{Tags: tags}, nil
+}
+
+// readVideoGitMetadata reads the Git provenance metadata tags embedded in
+// input using ffprobe.
+func readVideoGitMetadata(ctx context.Context, runner commandRunner, input string) ([]Tag, error) {
 	ffprobePath, err := runner.LookPath("ffprobe")
 	if err != nil {
 		return nil, fmt.Errorf("ffprobe is required but was not found on PATH: %w", err)
@@ -317,15 +393,15 @@ func readGitMetadata(ctx context.Context, opts ReadOptions, runner commandRunner
 		"-v", "quiet",
 		"-print_format", "json",
 		"-show_format",
-		opts.Input,
+		input,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to probe %q: %w", opts.Input, err)
+		return nil, fmt.Errorf("failed to probe %q: %w", input, err)
 	}
 
 	var probed ffprobeFormat
 	if err := json.Unmarshal(out, &probed); err != nil {
-		return nil, fmt.Errorf("failed to parse ffprobe output for %q: %w", opts.Input, err)
+		return nil, fmt.Errorf("failed to parse ffprobe output for %q: %w", input, err)
 	}
 
 	var tags []Tag
@@ -334,11 +410,7 @@ func readGitMetadata(ctx context.Context, opts ReadOptions, runner commandRunner
 			tags = append(tags, Tag{Key: key, Value: value})
 		}
 	}
-	if len(tags) == 0 {
-		return nil, fmt.Errorf("no git provenance metadata found in %q", opts.Input)
-	}
-
-	return &ReadResult{Tags: tags}, nil
+	return tags, nil
 }
 
 // publishNoReplace writes the staged file at tmpPath to output without ever

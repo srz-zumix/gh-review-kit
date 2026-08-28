@@ -60,14 +60,14 @@ gh review-kit                       # Root command
 | `--help, -h` | Show help for command |
 | `--version` | Show version |
 
-## Embed Git Provenance Metadata into a Video (attestation set)
+## Embed Git Provenance Metadata into a Video or Image (attestation set)
 
-Collect Git information (commit, branch, dirty state, commit date, and repository) from a local Git repository and embed it as global metadata tags into a copy of a video file. FFmpeg stream-copies all media without transcoding, preserving existing streams, metadata, and chapters on a best-effort basis. Embedded tags are verified with `ffprobe`; a container that cannot retain custom metadata keys produces warnings rather than a failure.
+Collect Git information (commit, branch, dirty state, commit date, and repository) from a local Git repository and embed it as metadata tags into a copy of a video or image file. For video files, FFmpeg stream-copies all media without transcoding, preserving existing streams, metadata, and chapters on a best-effort basis, and embedded tags are verified with `ffprobe`; a container that cannot retain custom metadata keys produces warnings rather than a failure. For PNG and JPEG files, tags are embedded natively (PNG `tEXt` chunks or JPEG COM segments) without invoking FFmpeg.
 
 This embeds unsigned provenance metadata only — it is not a cryptographic signature, GitHub artifact attestation, or tamper-proof claim. It does not call the GitHub API.
 
 ```bash
-gh review-kit attestation set <input-video> -o OUTPUT [flags]
+gh review-kit attestation set <input-file> -o OUTPUT [flags]
 ```
 
 ### Options
@@ -101,14 +101,17 @@ gh review-kit attestation set input.mp4 --output output.mp4 -C /path/to/repo
 
 # Overwrite an existing output file
 gh review-kit attestation set input.mp4 --output output.mp4 --force
+
+# Embed provenance into a PNG or JPEG image (no ffmpeg required)
+gh review-kit attestation set input.png --output output.png
 ```
 
-## Display Git Provenance Metadata Embedded in a Video (attestation view)
+## Display Git Provenance Metadata Embedded in a Video or Image (attestation view)
 
-Read the global metadata tags previously embedded by `attestation set` using `ffprobe`, without modifying the file.
+Read the metadata tags previously embedded by `attestation set`, without modifying the file. Video files are probed with `ffprobe`; PNG and JPEG files are read natively.
 
 ```bash
-gh review-kit attestation view <input-video> [flags]
+gh review-kit attestation view <input-file> [flags]
 ```
 
 ### Options
