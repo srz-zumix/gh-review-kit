@@ -42,19 +42,20 @@ gh review-kit rerequest 123 --read-only
 
 ## Commands
 
+
 ### attestation
 
-#### Embed Git provenance metadata into a video
+#### Embed Git provenance metadata into a video or image
 
 ```sh
-gh review-kit attestation set <input-video> -o OUTPUT [-C DIR | --repo-dir DIR] [--force] [--format FORMAT]
+gh review-kit attestation set <input-file> -o OUTPUT [-C DIR | --repo-dir DIR] [--force] [--format FORMAT]
 ```
 
-Collect Git information (commit, branch, dirty state, commit date, and repository) from a local Git repository and embed it as global metadata tags into a copy of the input video. FFmpeg stream-copies all media without transcoding, preserving existing streams, metadata, and chapters on a best-effort basis. The embedded tags are verified with `ffprobe` before the output file is written; a container that cannot retain custom metadata keys produces warnings rather than a failure.
+Collect Git information (commit, branch, dirty state, commit date, and repository) from a local Git repository and embed it as metadata tags into a copy of the input file. For video files, FFmpeg stream-copies all media without transcoding, preserving existing streams, metadata, and chapters on a best-effort basis, and the embedded tags are verified with `ffprobe` before the output file is written; a container that cannot retain custom metadata keys produces warnings rather than a failure. For PNG and JPEG files, tags are embedded natively (PNG `iTXt` chunks (UTF-8 text) or JPEG COM segments) without invoking FFmpeg.
 
 This embeds unsigned provenance metadata only. It is not a cryptographic signature, GitHub artifact attestation, or tamper-proof claim.
 
-Requires `ffmpeg` and `ffprobe` to be available on `PATH`.
+Requires `ffmpeg` and `ffprobe` to be available on `PATH` for video files; PNG and JPEG files have no external tool dependency.
 
 **Embedded tags:**
 
@@ -71,7 +72,7 @@ Requires `ffmpeg` and `ffprobe` to be available on `PATH`.
 
 - `--force`: Overwrite the output file if it already exists (optional, default: false)
 - `--format`: Output format: `text`, `json` (optional, default: `text`)
-- `-o`, `--output`: Output video file path (required)
+- `-o`, `--output`: Output file path (required)
 - `-C`, `--repo-dir`: Git repository directory to collect provenance from (optional, default: current directory)
 
 **Examples:**
@@ -85,17 +86,20 @@ gh review-kit attestation set input.mp4 --output output.mp4 -C /path/to/repo
 
 # Overwrite an existing output file
 gh review-kit attestation set input.mp4 --output output.mp4 --force
+
+# Embed provenance into a PNG or JPEG image (no ffmpeg required)
+gh review-kit attestation set input.png --output output.png
 ```
 
-#### Display Git provenance metadata embedded in a video
+#### Display Git provenance metadata embedded in a video or image
 
 ```sh
-gh review-kit attestation view <input-video> [--format FORMAT]
+gh review-kit attestation view <input-file> [--format FORMAT]
 ```
 
-Read the global metadata tags previously embedded by `attestation set` using `ffprobe`, without modifying the file.
+Read the metadata tags previously embedded by `attestation set`, without modifying the file. Video files are probed with `ffprobe`; PNG and JPEG files are read natively.
 
-Requires `ffprobe` to be available on `PATH`.
+Requires `ffprobe` to be available on `PATH` for video files; PNG and JPEG files have no external tool dependency.
 
 **Options:**
 

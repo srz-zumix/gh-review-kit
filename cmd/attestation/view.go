@@ -16,7 +16,7 @@ import (
 var readGitMetadata = attestation.ReadGitMetadata
 
 // NewViewCmd creates a new command to display Git provenance metadata
-// embedded in a video file.
+// embedded in a video, PNG, or JPEG file.
 func NewViewCmd() *cobra.Command {
 	var (
 		format   string
@@ -24,14 +24,16 @@ func NewViewCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "view <input-video>",
-		Short: "Display Git provenance metadata embedded in a video file",
-		Long: `Display Git provenance metadata embedded in a video file.
+		Use:   "view <input-file>",
+		Short: "Display Git provenance metadata embedded in a video, PNG, or JPEG file",
+		Long: `Display Git provenance metadata embedded in a video, PNG, or JPEG file.
 
-This command reads the global metadata tags previously embedded by
-'attestation set' using ffprobe, without modifying the file.
+This command reads the metadata tags previously embedded by 'attestation
+set', without modifying the file. Video files are probed with ffprobe; PNG
+and JPEG files are read natively.
 
-Requires ffprobe to be available on PATH.`,
+Requires ffprobe to be available on PATH for video files; PNG and JPEG
+files have no external tool dependency.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			input := args[0]

@@ -23,7 +23,7 @@ var embedGitMetadata = attestation.EmbedGitMetadata
 var isReadonly = guardrails.IsReadonly
 
 // NewSetCmd creates a new command to embed Git provenance metadata into a
-// video file.
+// video, PNG, or JPEG file.
 func NewSetCmd() *cobra.Command {
 	var (
 		output   string
@@ -34,25 +34,27 @@ func NewSetCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "set <input-video>",
-		Short: "Embed Git provenance metadata into a video file",
-		Long: `Embed Git provenance metadata into a video file.
+		Use:   "set <input-file>",
+		Short: "Embed Git provenance metadata into a video, PNG, or JPEG file",
+		Long: `Embed Git provenance metadata into a video, PNG, or JPEG file.
 
 This command collects Git information (commit, branch, dirty state, commit
-date, and repository) from a local Git repository and embeds it as global
-metadata tags into a copy of the input video, using FFmpeg to stream-copy the
-media without transcoding. The resulting metadata is verified with ffprobe
-before being written to the output path.
+date, and repository) from a local Git repository and embeds it as metadata
+tags into a copy of the input file. Video files are stream-copied with
+FFmpeg without transcoding and verified with ffprobe. PNG and JPEG files are
+embedded natively (PNG iTXt chunks (UTF-8 text) or JPEG COM segments), without invoking
+FFmpeg.
 
 This embeds unsigned provenance metadata only. It is not a cryptographic
 signature, GitHub artifact attestation, or tamper-proof claim; the metadata
-can be edited or removed like any other video metadata.
+can be edited or removed like any other file metadata.
 
-Requires ffmpeg and ffprobe to be available on PATH.`,
+Requires ffmpeg and ffprobe to be available on PATH for video files; PNG and
+JPEG files have no external tool dependency.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if isReadonly() {
-				return fmt.Errorf("attestation set cannot run in read-only mode because it writes a local video file")
+				return fmt.Errorf("attestation set cannot run in read-only mode because it writes a local file")
 			}
 			if output == "" {
 				return fmt.Errorf("--output is required")
@@ -83,7 +85,7 @@ Requires ffmpeg and ffprobe to be available on PATH.`,
 
 	f := cmd.Flags()
 	f.BoolVarP(&force, "force", "f", false, "Overwrite the output file if it already exists")
-	f.StringVarP(&output, "output", "o", "", "Output video file path (required)")
+	f.StringVarP(&output, "output", "o", "", "Output file path (required)")
 	f.StringVarP(&repoDir, "repo-dir", "C", "", "Git repository directory to collect provenance from (default: current directory)")
 	if err := cmdflags.AddFormatFlags(cmd, &exporter, &format, "text", []string{"text"}); err != nil {
 		panic(err)
