@@ -15,7 +15,9 @@ const (
 )
 
 // jpegEmbedTags returns a copy of a JPEG image with tags added as COM
-// (comment) marker segments immediately after the SOI marker.
+// (comment) marker segments immediately after the SOI marker. Any existing
+// provenance COM segments are dropped, so re-embedding replaces prior metadata
+// rather than leaving stale values that would win under last-value-wins reads.
 func jpegEmbedTags(data []byte, tags []Tag) ([]byte, error) {
 	if !bytes.HasPrefix(data, jpegSignature[:2]) {
 		return nil, fmt.Errorf("not a JPEG file")
@@ -30,7 +32,44 @@ func jpegEmbedTags(data []byte, tags []Tag) ([]byte, error) {
 		}
 		out.Write(seg)
 	}
-	out.Write(data[2:])
+
+	// Copy the remaining markers, dropping existing provenance COM segments.
+	// Parsing stops at the start-of-scan marker; entropy-coded data (and the
+	// trailing EOI) is copied verbatim afterwards.
+	pos := 2
+	for pos+2 <= len(data) {
+		if data[pos] != 0xFF {
+			break // misaligned or entropy data: copy the rest verbatim
+		}
+		marker := data[pos+1]
+		if marker == jpegMarkerSOS || marker == jpegMarkerEOI {
+			break
+		}
+		if marker == 0x00 || marker == 0xFF || marker == 0x01 || (marker >= 0xD0 && marker <= 0xD7) {
+			out.Write(data[pos : pos+2]) // standalone marker: no length/payload
+			pos += 2
+			continue
+		}
+		if pos+4 > len(data) {
+			break
+		}
+		segLen := int(binary.BigEndian.Uint16(data[pos+2 : pos+4]))
+		if segLen < 2 || pos+2+segLen > len(data) {
+			break
+		}
+		segEnd := pos + 2 + segLen
+		if marker == jpegMarkerCOM {
+			if key, _, ok := strings.Cut(string(data[pos+4:segEnd]), "="); ok && isGitTagKey(key) {
+				pos = segEnd
+				continue // drop existing provenance segment
+			}
+		}
+		out.Write(data[pos:segEnd])
+		pos = segEnd
+	}
+	if pos < len(data) {
+		out.Write(data[pos:])
+	}
 	return out.Bytes(), nil
 }
 

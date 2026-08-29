@@ -331,6 +331,18 @@ var gitTagOrder = []string{
 	GitTagRepository,
 }
 
+// isGitTagKey reports whether key is one of the known Git provenance metadata
+// keys, so embedders can strip stale provenance chunks/segments before writing
+// fresh ones and re-embedding stays authoritative.
+func isGitTagKey(key string) bool {
+	for _, k := range gitTagOrder {
+		if k == key {
+			return true
+		}
+	}
+	return false
+}
+
 // ReadOptions configures ReadGitMetadata.
 type ReadOptions struct {
 	// Input is the path to the video or image file to inspect (required).
