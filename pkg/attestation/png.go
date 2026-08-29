@@ -207,11 +207,5 @@ func pngReadTags(data []byte) ([]Tag, error) {
 		}
 	}
 
-	var tags []Tag
-	for _, key := range knownTagOrder {
-		if value, ok := found[key]; ok {
-			tags = append(tags, Tag{Key: key, Value: value})
-		}
-	}
-	return tags, nil
+	return orderedKnownTags(found), nil
 }

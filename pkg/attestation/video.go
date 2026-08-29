@@ -417,13 +417,7 @@ func readVideoGitMetadata(ctx context.Context, runner commandRunner, input strin
 		return nil, fmt.Errorf("failed to parse ffprobe output for %q: %w", input, err)
 	}
 
-	var tags []Tag
-	for _, key := range knownTagOrder {
-		if value, ok := probed.Format.Tags[key]; ok {
-			tags = append(tags, Tag{Key: key, Value: value})
-		}
-	}
-	return tags, nil
+	return orderedKnownTags(probed.Format.Tags), nil
 }
 
 // publishNoReplace writes the staged file at tmpPath to output without ever

@@ -27,3 +27,24 @@ func isKnownTagKey(key string) bool {
 	}
 	return false
 }
+
+// orderedKnownTags returns the known metadata tags present in found, in
+// knownTagOrder, so every format's read path reports them consistently. A
+// CommentTag with an empty value is treated as absent, preserving the
+// documented contract that the comment tag appears only when a non-empty
+// comment was supplied: the write path treats an empty comment as "no comment",
+// and the video delete-on-re-embed (-metadata attestation.comment=) can leave
+// some containers holding the key with an empty value. Empty values for the
+// other (provenance) keys are kept so genuinely malformed metadata is not
+// silently hidden.
+func orderedKnownTags(found map[string]string) []Tag {
+	var tags []Tag
+	for _, key := range knownTagOrder {
+		value, ok := found[key]
+		if !ok || (key == CommentTag && value == "") {
+			continue
+		}
+		tags = append(tags, Tag{Key: key, Value: value})
+	}
+	return tags
+}
