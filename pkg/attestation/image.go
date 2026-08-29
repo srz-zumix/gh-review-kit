@@ -53,7 +53,7 @@ func peekImageFormat(path string) (imageFormat, error) {
 }
 
 // embedImageTags returns a copy of data with tags embedded as native
-// metadata for the given image format (PNG tEXt chunks or JPEG COM segments).
+// metadata for the given image format (PNG iTXt chunks (UTF-8 text) or JPEG COM segments).
 func embedImageTags(format imageFormat, data []byte, tags []Tag) ([]byte, error) {
 	switch format {
 	case imageFormatPNG:

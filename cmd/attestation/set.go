@@ -42,7 +42,7 @@ This command collects Git information (commit, branch, dirty state, commit
 date, and repository) from a local Git repository and embeds it as metadata
 tags into a copy of the input file. Video files are stream-copied with
 FFmpeg without transcoding and verified with ffprobe. PNG and JPEG files are
-embedded natively (PNG tEXt chunks or JPEG COM segments), without invoking
+embedded natively (PNG iTXt chunks (UTF-8 text) or JPEG COM segments), without invoking
 FFmpeg.
 
 This embeds unsigned provenance metadata only. It is not a cryptographic

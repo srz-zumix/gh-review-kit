@@ -51,7 +51,7 @@ gh review-kit rerequest 123 --read-only
 gh review-kit attestation set <input-file> -o OUTPUT [-C DIR | --repo-dir DIR] [--force] [--format FORMAT]
 ```
 
-Collect Git information (commit, branch, dirty state, commit date, and repository) from a local Git repository and embed it as metadata tags into a copy of the input file. For video files, FFmpeg stream-copies all media without transcoding, preserving existing streams, metadata, and chapters on a best-effort basis, and the embedded tags are verified with `ffprobe` before the output file is written; a container that cannot retain custom metadata keys produces warnings rather than a failure. For PNG and JPEG files, tags are embedded natively (PNG `tEXt` chunks or JPEG COM segments) without invoking FFmpeg.
+Collect Git information (commit, branch, dirty state, commit date, and repository) from a local Git repository and embed it as metadata tags into a copy of the input file. For video files, FFmpeg stream-copies all media without transcoding, preserving existing streams, metadata, and chapters on a best-effort basis, and the embedded tags are verified with `ffprobe` before the output file is written; a container that cannot retain custom metadata keys produces warnings rather than a failure. For PNG and JPEG files, tags are embedded natively (PNG `iTXt` chunks (UTF-8 text) or JPEG COM segments) without invoking FFmpeg.
 
 This embeds unsigned provenance metadata only. It is not a cryptographic signature, GitHub artifact attestation, or tamper-proof claim.
 

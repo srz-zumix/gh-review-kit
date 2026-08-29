@@ -169,7 +169,7 @@ func embedGitMetadata(ctx context.Context, opts EmbedOptions, runner commandRunn
 }
 
 // embedImageGitMetadata embeds tags into input's native image metadata
-// (PNG tEXt chunks or JPEG COM segments) and writes the result to tmpPath,
+// (PNG iTXt chunks (UTF-8 text) or JPEG COM segments) and writes the result to tmpPath,
 // without invoking ffmpeg/ffprobe. It returns warnings for any tag that a
 // read-back of the written file does not confirm.
 func embedImageGitMetadata(input, tmpPath string, format imageFormat, tags []Tag) ([]string, error) {

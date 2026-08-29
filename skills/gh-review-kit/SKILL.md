@@ -62,7 +62,7 @@ gh review-kit                       # Root command
 
 ## Embed Git Provenance Metadata into a Video or Image (attestation set)
 
-Collect Git information (commit, branch, dirty state, commit date, and repository) from a local Git repository and embed it as metadata tags into a copy of a video or image file. For video files, FFmpeg stream-copies all media without transcoding, preserving existing streams, metadata, and chapters on a best-effort basis, and embedded tags are verified with `ffprobe`; a container that cannot retain custom metadata keys produces warnings rather than a failure. For PNG and JPEG files, tags are embedded natively (PNG `tEXt` chunks or JPEG COM segments) without invoking FFmpeg.
+Collect Git information (commit, branch, dirty state, commit date, and repository) from a local Git repository and embed it as metadata tags into a copy of a video or image file. For video files, FFmpeg stream-copies all media without transcoding, preserving existing streams, metadata, and chapters on a best-effort basis, and embedded tags are verified with `ffprobe`; a container that cannot retain custom metadata keys produces warnings rather than a failure. For PNG and JPEG files, tags are embedded natively (PNG `iTXt` chunks (UTF-8 text) or JPEG COM segments) without invoking FFmpeg.
 
 This embeds unsigned provenance metadata only — it is not a cryptographic signature, GitHub artifact attestation, or tamper-proof claim. It does not call the GitHub API.
 
