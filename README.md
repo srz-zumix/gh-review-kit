@@ -72,7 +72,7 @@ Requires `ffmpeg` and `ffprobe` to be available on `PATH` for video files; PNG a
 
 - `--force`: Overwrite the output file if it already exists (optional, default: false)
 - `--format`: Output format: `text`, `json` (optional, default: `text`)
-- `-o`, `--output`: Output video file path (required)
+- `-o`, `--output`: Output file path (required)
 - `-C`, `--repo-dir`: Git repository directory to collect provenance from (optional, default: current directory)
 
 **Examples:**

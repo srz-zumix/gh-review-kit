@@ -21,14 +21,19 @@ func pngParseChunks(data []byte) ([]pngChunk, error) {
 	}
 	var chunks []pngChunk
 	pos := len(pngSignature)
-	for pos+8 <= len(data) {
+	for len(data)-pos >= 8 {
 		length := binary.BigEndian.Uint32(data[pos : pos+4])
 		typ := string(data[pos+4 : pos+8])
 		start := pos + 8
-		end := start + int(length)
-		if length > uint32(len(data)) || end+4 > len(data) {
+		// Validate against the remaining byte count using uint64 before
+		// converting length to int, so a malformed length cannot overflow int
+		// on 32-bit platforms and cause an out-of-range slice. Each chunk
+		// carries its data plus a trailing 4-byte CRC.
+		remaining := uint64(len(data) - start)
+		if uint64(length)+4 > remaining {
 			return nil, fmt.Errorf("truncated PNG chunk %q", typ)
 		}
+		end := start + int(length)
 		chunks = append(chunks, pngChunk{Type: typ, Data: data[start:end]})
 		pos = end + 4
 		if typ == "IEND" {

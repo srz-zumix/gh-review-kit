@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"math"
 	"strings"
 )
 
@@ -23,19 +24,29 @@ func jpegEmbedTags(data []byte, tags []Tag) ([]byte, error) {
 	var out bytes.Buffer
 	out.Write(data[:2]) // SOI
 	for _, tag := range tags {
-		out.Write(jpegEncodeCOM([]byte(fmt.Sprintf("%s=%s", tag.Key, tag.Value))))
+		seg, err := jpegEncodeCOM([]byte(fmt.Sprintf("%s=%s", tag.Key, tag.Value)))
+		if err != nil {
+			return nil, fmt.Errorf("failed to embed tag %q: %w", tag.Key, err)
+		}
+		out.Write(seg)
 	}
 	out.Write(data[2:])
 	return out.Bytes(), nil
 }
 
-// jpegEncodeCOM serializes a single COM marker segment carrying payload.
-func jpegEncodeCOM(payload []byte) []byte {
+// jpegEncodeCOM serializes a single COM marker segment carrying payload. The
+// COM length field is a 2-byte big-endian value that includes its own two
+// bytes, so the payload cannot exceed math.MaxUint16-2 bytes; a larger payload
+// would wrap the length and emit an invalid JPEG, so it is rejected instead.
+func jpegEncodeCOM(payload []byte) ([]byte, error) {
+	if len(payload) > math.MaxUint16-2 {
+		return nil, fmt.Errorf("JPEG comment segment payload too large: %d bytes (max %d)", len(payload), math.MaxUint16-2)
+	}
 	length := make([]byte, 2)
 	binary.BigEndian.PutUint16(length, uint16(len(payload)+2))
 	buf := []byte{0xFF, jpegMarkerCOM}
 	buf = append(buf, length...)
-	return append(buf, payload...)
+	return append(buf, payload...), nil
 }
 
 // jpegReadTags scans marker segments before the start-of-scan marker for

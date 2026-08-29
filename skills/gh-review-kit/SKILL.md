@@ -76,7 +76,7 @@ gh review-kit attestation set <input-file> -o OUTPUT [flags]
 | --- | --- |
 | `--force` | Overwrite the output file if it already exists (default: false) |
 | `--format` | Output format: `text`, `json` (default: `text`) |
-| `-o`, `--output` | Output video file path (required) |
+| `-o`, `--output` | Output file path (required) |
 | `-C`, `--repo-dir` | Git repository directory to collect provenance from (default: current directory) |
 
 ### Embedded Tags

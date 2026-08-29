@@ -186,7 +186,11 @@ func embedImageGitMetadata(input, tmpPath string, format imageFormat, tags []Tag
 		return nil, fmt.Errorf("failed to write temporary output file: %w", err)
 	}
 
-	readBack, err := readImageTags(format, out)
+	written, err := os.ReadFile(tmpPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read back written file %q: %w", tmpPath, err)
+	}
+	readBack, err := readImageTags(format, written)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify embedded metadata: %w", err)
 	}
@@ -211,7 +215,6 @@ func embedVideoGitMetadata(ctx context.Context, runner commandRunner, ffmpegPath
 	}
 	return warnings, nil
 }
-
 
 // validateInputOutput checks that input is a usable source file, that input
 // and output are not the same file, and that output may be written given the

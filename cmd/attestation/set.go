@@ -23,7 +23,7 @@ var embedGitMetadata = attestation.EmbedGitMetadata
 var isReadonly = guardrails.IsReadonly
 
 // NewSetCmd creates a new command to embed Git provenance metadata into a
-// video file.
+// video, PNG, or JPEG file.
 func NewSetCmd() *cobra.Command {
 	var (
 		output   string
@@ -54,7 +54,7 @@ JPEG files have no external tool dependency.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if isReadonly() {
-				return fmt.Errorf("attestation set cannot run in read-only mode because it writes a local video file")
+				return fmt.Errorf("attestation set cannot run in read-only mode because it writes a local file")
 			}
 			if output == "" {
 				return fmt.Errorf("--output is required")
@@ -85,7 +85,7 @@ JPEG files have no external tool dependency.`,
 
 	f := cmd.Flags()
 	f.BoolVarP(&force, "force", "f", false, "Overwrite the output file if it already exists")
-	f.StringVarP(&output, "output", "o", "", "Output video file path (required)")
+	f.StringVarP(&output, "output", "o", "", "Output file path (required)")
 	f.StringVarP(&repoDir, "repo-dir", "C", "", "Git repository directory to collect provenance from (default: current directory)")
 	if err := cmdflags.AddFormatFlags(cmd, &exporter, &format, "text", []string{"text"}); err != nil {
 		panic(err)

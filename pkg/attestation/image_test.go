@@ -24,8 +24,9 @@ func samplePNG(t *testing.T) []byte {
 
 func sampleJPEG(t *testing.T) []byte {
 	t.Helper()
-	// Minimal JPEG: SOI, a bare comment marker, EOI.
-	return []byte{0xFF, 0xD8, 0xFF, 0xFE, 0x00, 0x06, 'h', 'e', 'l', 'l', 'o', 0xFF, 0xD9}
+	// Minimal JPEG: SOI, a bare comment marker, EOI. The COM length (0x0007)
+	// counts the two length bytes plus the 5-byte "hello" payload.
+	return []byte{0xFF, 0xD8, 0xFF, 0xFE, 0x00, 0x07, 'h', 'e', 'l', 'l', 'o', 0xFF, 0xD9}
 }
 
 func TestDetectImageFormat(t *testing.T) {
