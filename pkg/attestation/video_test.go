@@ -118,6 +118,29 @@ func TestFfmpegArgsNoMovFlagsForNonMovContainer(t *testing.T) {
 	}
 }
 
+func TestFfmpegArgsDeletesInheritedCommentWhenNone(t *testing.T) {
+	// With no comment tag, an inherited attestation.comment must be deleted so
+	// -map_metadata 0 does not carry a stale comment across a re-embed.
+	args := ffmpegArgs("in.mp4", "out.mp4", sampleTags())
+	joined := strings.Join(args, " ")
+	if !strings.Contains(joined, "-metadata attestation.comment=") {
+		t.Errorf("expected empty comment delete arg, got:\n%s", joined)
+	}
+}
+
+func TestFfmpegArgsKeepsProvidedComment(t *testing.T) {
+	tags := append(sampleTags(), Tag{Key: CommentTag, Value: "my note"})
+	args := ffmpegArgs("in.mp4", "out.mp4", tags)
+	joined := strings.Join(args, " ")
+	if !strings.Contains(joined, "-metadata attestation.comment=my note") {
+		t.Errorf("expected provided comment to be set, got:\n%s", joined)
+	}
+	// No empty delete arg when a comment is provided.
+	if strings.Contains(joined, "-metadata attestation.comment= ") || strings.HasSuffix(joined, "-metadata attestation.comment=") {
+		t.Errorf("did not expect an empty comment delete when a comment is provided:\n%s", joined)
+	}
+}
+
 func TestVerifyTagsAllMatch(t *testing.T) {
 	tags := sampleTags()
 	runner := &fakeRunner{ffprobeOut: probeJSON(tagsMap(tags))}
@@ -481,6 +504,61 @@ func TestEmbedGitMetadataEndToEndWithFakeRunner(t *testing.T) {
 	for _, e := range entries {
 		if strings.Contains(e.Name(), "attestation") {
 			t.Fatalf("unexpected leftover temp entry: %s", e.Name())
+		}
+	}
+}
+
+func TestEmbedGitMetadataWithCommentEndToEndWithFakeRunner(t *testing.T) {
+	dir := initRepo(t)
+	in := filepath.Join(dir, "input.mp4")
+	writeFile(t, in, "fake-video-bytes")
+	out := filepath.Join(dir, "output.mp4")
+
+	runner := &fakeRunner{ffmpegWrite: []byte("fake-video-bytes")}
+	meta, err := CollectGitMetadata(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("CollectGitMetadata: %v", err)
+	}
+	wantTags := append(meta.Tags(), Tag{Key: CommentTag, Value: "pre-release build"})
+	runner.ffprobeOut = probeJSON(tagsMap(wantTags))
+
+	result, err := embedGitMetadata(context.Background(), EmbedOptions{
+		Input:   in,
+		Output:  out,
+		RepoDir: dir,
+		Comment: "pre-release build",
+	}, runner)
+	if err != nil {
+		t.Fatalf("embedGitMetadata: %v", err)
+	}
+	if len(result.Warnings) != 0 {
+		t.Fatalf("expected no warnings, got %v", result.Warnings)
+	}
+
+	last := result.Tags[len(result.Tags)-1]
+	if last.Key != CommentTag || last.Value != "pre-release build" {
+		t.Fatalf("expected trailing comment tag, got %v", last)
+	}
+
+	if len(runner.ffmpegArgs) != 1 {
+		t.Fatalf("expected exactly one ffmpeg invocation, got %d", len(runner.ffmpegArgs))
+	}
+	if !strings.Contains(strings.Join(runner.ffmpegArgs[0], " "), "-metadata attestation.comment=pre-release build") {
+		t.Fatalf("ffmpeg args missing comment metadata:\n%v", runner.ffmpegArgs[0])
+	}
+
+	// Read back through the same stub and confirm knownTagOrder placement
+	// (comment last) via an exact ordered comparison.
+	readResult, err := readGitMetadata(context.Background(), ReadOptions{Input: out}, runner)
+	if err != nil {
+		t.Fatalf("readGitMetadata: %v", err)
+	}
+	if len(readResult.Tags) != len(result.Tags) {
+		t.Fatalf("readGitMetadata tags = %v, want %v", readResult.Tags, result.Tags)
+	}
+	for i, tag := range result.Tags {
+		if readResult.Tags[i] != tag {
+			t.Fatalf("tag[%d] = %v, want %v", i, readResult.Tags[i], tag)
 		}
 	}
 }

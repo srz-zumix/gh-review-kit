@@ -289,6 +289,21 @@ func ffmpegArgs(input, output string, tags []Tag) []string {
 	for _, tag := range tags {
 		args = append(args, "-metadata", fmt.Sprintf("%s=%s", tag.Key, tag.Value))
 	}
+	// -map_metadata 0 copies the input's global metadata, so a previously
+	// embedded comment would survive a re-embed that supplies no --comment.
+	// Emit an empty value to delete any inherited comment, keeping re-embedding
+	// authoritative and consistent with the PNG/JPEG paths (which strip known
+	// tags before writing).
+	hasComment := false
+	for _, tag := range tags {
+		if tag.Key == CommentTag {
+			hasComment = true
+			break
+		}
+	}
+	if !hasComment {
+		args = append(args, "-metadata", CommentTag+"=")
+	}
 	if movFamilyExtensions[strings.ToLower(filepath.Ext(output))] {
 		args = append(args, "-movflags", "use_metadata_tags")
 	}
@@ -324,31 +339,6 @@ func verifyTags(ctx context.Context, runner commandRunner, ffprobePath, path str
 	}
 
 	return warningsForMismatch(tags, probed.Format.Tags), nil
-}
-
-// knownTagOrder lists the known metadata keys this package embeds and reads
-// back — the Git provenance tags, in the same order as GitMetadata.Tags,
-// followed by CommentTag — so ReadGitMetadata reports them consistently.
-var knownTagOrder = []string{
-	GitTagCommit,
-	GitTagBranch,
-	GitTagDirty,
-	GitTagCommitDate,
-	GitTagAuthor,
-	GitTagRepository,
-	CommentTag,
-}
-
-// isKnownTagKey reports whether key is one of the known metadata keys this
-// package embeds, so embedders can strip stale provenance chunks/segments
-// before writing fresh ones and re-embedding stays authoritative.
-func isKnownTagKey(key string) bool {
-	for _, k := range knownTagOrder {
-		if k == key {
-			return true
-		}
-	}
-	return false
 }
 
 // ReadOptions configures ReadGitMetadata.

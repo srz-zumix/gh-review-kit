@@ -282,3 +282,95 @@ func TestEmbedAndReadGitMetadataPNGWithComment(t *testing.T) {
 		t.Fatal("expected comment tag to be read back")
 	}
 }
+
+func TestEmbedAndReadGitMetadataJPEGWithComment(t *testing.T) {
+	dir := initRepo(t)
+	in := filepath.Join(dir, "input.jpg")
+	if err := os.WriteFile(in, decodableJPEG(t), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	out := filepath.Join(dir, "output.jpg")
+
+	ctx := context.Background()
+	embedResult, err := EmbedGitMetadata(ctx, EmbedOptions{Input: in, Output: out, RepoDir: dir, Comment: "pre-release build"})
+	if err != nil {
+		t.Fatalf("EmbedGitMetadata: %v", err)
+	}
+	if len(embedResult.Warnings) != 0 {
+		t.Fatalf("unexpected warnings: %v", embedResult.Warnings)
+	}
+	last := embedResult.Tags[len(embedResult.Tags)-1]
+	if last.Key != CommentTag || last.Value != "pre-release build" {
+		t.Fatalf("expected trailing comment tag, got %v", last)
+	}
+
+	outBytes, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatalf("ReadFile(out): %v", err)
+	}
+	if _, err := jpeg.Decode(bytes.NewReader(outBytes)); err != nil {
+		t.Fatalf("output is not a decodable JPEG: %v", err)
+	}
+
+	readResult, err := ReadGitMetadata(ctx, ReadOptions{Input: out})
+	if err != nil {
+		t.Fatalf("ReadGitMetadata: %v", err)
+	}
+	if len(readResult.Tags) != len(embedResult.Tags) {
+		t.Fatalf("ReadGitMetadata tags = %v, want %v", readResult.Tags, embedResult.Tags)
+	}
+	for i, tag := range embedResult.Tags {
+		if readResult.Tags[i] != tag {
+			t.Fatalf("tag[%d] = %v, want %v", i, readResult.Tags[i], tag)
+		}
+	}
+}
+
+func TestPNGReEmbedRemovesComment(t *testing.T) {
+	withComment, err := pngEmbedTags(samplePNG(t), []Tag{
+		{Key: GitTagBranch, Value: "main"},
+		{Key: CommentTag, Value: "old"},
+	})
+	if err != nil {
+		t.Fatalf("pngEmbedTags(withComment): %v", err)
+	}
+	// Re-embedding without a comment must strip the previously embedded one.
+	withoutComment, err := pngEmbedTags(withComment, []Tag{{Key: GitTagBranch, Value: "main"}})
+	if err != nil {
+		t.Fatalf("pngEmbedTags(withoutComment): %v", err)
+	}
+
+	got, err := pngReadTags(withoutComment)
+	if err != nil {
+		t.Fatalf("pngReadTags: %v", err)
+	}
+	for _, tag := range got {
+		if tag.Key == CommentTag {
+			t.Fatalf("expected comment tag to be removed, got %v", got)
+		}
+	}
+}
+
+func TestJPEGReEmbedRemovesComment(t *testing.T) {
+	withComment, err := jpegEmbedTags(sampleJPEG(t), []Tag{
+		{Key: GitTagBranch, Value: "main"},
+		{Key: CommentTag, Value: "old"},
+	})
+	if err != nil {
+		t.Fatalf("jpegEmbedTags(withComment): %v", err)
+	}
+	withoutComment, err := jpegEmbedTags(withComment, []Tag{{Key: GitTagBranch, Value: "main"}})
+	if err != nil {
+		t.Fatalf("jpegEmbedTags(withoutComment): %v", err)
+	}
+
+	got, err := jpegReadTags(withoutComment)
+	if err != nil {
+		t.Fatalf("jpegReadTags: %v", err)
+	}
+	for _, tag := range got {
+		if tag.Key == CommentTag {
+			t.Fatalf("expected comment tag to be removed, got %v", got)
+		}
+	}
+}
