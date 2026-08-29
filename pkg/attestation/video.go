@@ -63,6 +63,9 @@ type EmbedOptions struct {
 	// RepoDir is the Git repository directory to collect provenance from.
 	// When empty, the current directory is used.
 	RepoDir string
+	// Comment is an optional freeform comment embedded alongside the Git
+	// provenance tags under CommentTag. When empty, no comment tag is added.
+	Comment string
 	// Force allows overwriting an existing Output file.
 	Force bool
 }
@@ -124,6 +127,9 @@ func embedGitMetadata(ctx context.Context, opts EmbedOptions, runner commandRunn
 		return nil, fmt.Errorf("failed to collect git metadata: %w", err)
 	}
 	tags := meta.Tags()
+	if opts.Comment != "" {
+		tags = append(tags, Tag{Key: CommentTag, Value: opts.Comment})
+	}
 
 	outputDir := filepath.Dir(opts.Output)
 	ext := filepath.Ext(opts.Output)
@@ -320,22 +326,24 @@ func verifyTags(ctx context.Context, runner commandRunner, ffprobePath, path str
 	return warningsForMismatch(tags, probed.Format.Tags), nil
 }
 
-// gitTagOrder lists the known Git provenance metadata keys, in the same
-// order as GitMetadata.Tags, so ReadGitMetadata reports them consistently.
-var gitTagOrder = []string{
+// knownTagOrder lists the known metadata keys this package embeds and reads
+// back — the Git provenance tags, in the same order as GitMetadata.Tags,
+// followed by CommentTag — so ReadGitMetadata reports them consistently.
+var knownTagOrder = []string{
 	GitTagCommit,
 	GitTagBranch,
 	GitTagDirty,
 	GitTagCommitDate,
 	GitTagAuthor,
 	GitTagRepository,
+	CommentTag,
 }
 
-// isGitTagKey reports whether key is one of the known Git provenance metadata
-// keys, so embedders can strip stale provenance chunks/segments before writing
-// fresh ones and re-embedding stays authoritative.
-func isGitTagKey(key string) bool {
-	for _, k := range gitTagOrder {
+// isKnownTagKey reports whether key is one of the known metadata keys this
+// package embeds, so embedders can strip stale provenance chunks/segments
+// before writing fresh ones and re-embedding stays authoritative.
+func isKnownTagKey(key string) bool {
+	for _, k := range knownTagOrder {
 		if k == key {
 			return true
 		}
@@ -420,7 +428,7 @@ func readVideoGitMetadata(ctx context.Context, runner commandRunner, input strin
 	}
 
 	var tags []Tag
-	for _, key := range gitTagOrder {
+	for _, key := range knownTagOrder {
 		if value, ok := probed.Format.Tags[key]; ok {
 			tags = append(tags, Tag{Key: key, Value: value})
 		}

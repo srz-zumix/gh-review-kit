@@ -28,6 +28,7 @@ func NewSetCmd() *cobra.Command {
 	var (
 		output   string
 		repoDir  string
+		comment  string
 		force    bool
 		format   string
 		exporter cmdutil.Exporter
@@ -40,9 +41,10 @@ func NewSetCmd() *cobra.Command {
 
 This command collects Git information (commit, branch, dirty state, commit
 date, and repository) from a local Git repository and embeds it as metadata
-tags into a copy of the input file. Video files are stream-copied with
-FFmpeg without transcoding and verified with ffprobe. PNG and JPEG files are
-embedded natively (PNG iTXt chunks (UTF-8 text) or JPEG COM segments), without invoking
+tags into a copy of the input file, together with an optional freeform
+comment (--comment). Video files are stream-copied with FFmpeg without
+transcoding and verified with ffprobe. PNG and JPEG files are embedded
+natively (PNG iTXt chunks (UTF-8 text) or JPEG COM segments), without invoking
 FFmpeg.
 
 This embeds unsigned provenance metadata only. It is not a cryptographic
@@ -67,6 +69,7 @@ JPEG files have no external tool dependency.`,
 				Input:   input,
 				Output:  output,
 				RepoDir: repoDir,
+				Comment: comment,
 				Force:   force,
 			})
 			if err != nil {
@@ -87,6 +90,7 @@ JPEG files have no external tool dependency.`,
 	f.BoolVarP(&force, "force", "f", false, "Overwrite the output file if it already exists")
 	f.StringVarP(&output, "output", "o", "", "Output file path (required)")
 	f.StringVarP(&repoDir, "repo-dir", "C", "", "Git repository directory to collect provenance from (default: current directory)")
+	f.StringVar(&comment, "comment", "", "Freeform comment to embed alongside the Git provenance tags (optional, default: none)")
 	if err := cmdflags.AddFormatFlags(cmd, &exporter, &format, "text", []string{"text"}); err != nil {
 		panic(err)
 	}

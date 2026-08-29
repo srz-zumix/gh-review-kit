@@ -59,7 +59,7 @@ func jpegEmbedTags(data []byte, tags []Tag) ([]byte, error) {
 		}
 		segEnd := pos + 2 + segLen
 		if marker == jpegMarkerCOM {
-			if key, _, ok := strings.Cut(string(data[pos+4:segEnd]), "="); ok && isGitTagKey(key) {
+			if key, _, ok := strings.Cut(string(data[pos+4:segEnd]), "="); ok && isKnownTagKey(key) {
 				pos = segEnd
 				continue // drop existing provenance segment
 			}
@@ -128,7 +128,7 @@ func jpegReadTags(data []byte) ([]Tag, error) {
 	}
 
 	var tags []Tag
-	for _, key := range gitTagOrder {
+	for _, key := range knownTagOrder {
 		if value, ok := found[key]; ok {
 			tags = append(tags, Tag{Key: key, Value: value})
 		}

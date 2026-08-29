@@ -39,6 +39,11 @@ const GitTagAuthor = "git.author"
 // directory name when no "origin" remote is configured.
 const GitTagRepository = "git.repository"
 
+// CommentTag is the metadata key holding an optional, freeform comment
+// supplied by the caller via EmbedOptions.Comment, alongside the Git
+// provenance tags. Unlike the git.* tags, its value is not derived from Git.
+const CommentTag = "attestation.comment"
+
 // DetachedBranch is the value used for GitMetadata.Branch when HEAD is not
 // on any branch (detached HEAD state).
 const DetachedBranch = "detached"

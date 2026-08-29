@@ -160,7 +160,7 @@ func pngEmbedTags(data []byte, tags []Tag) ([]byte, error) {
 	out.Write(pngSignature)
 	insertedAfterIHDR := false
 	for _, c := range chunks {
-		if key, ok := pngTextChunkKeyword(c); ok && isGitTagKey(key) {
+		if key, ok := pngTextChunkKeyword(c); ok && isKnownTagKey(key) {
 			continue // replace existing provenance metadata
 		}
 		out.Write(pngEncodeChunk(c.Type, c.Data))
@@ -208,7 +208,7 @@ func pngReadTags(data []byte) ([]Tag, error) {
 	}
 
 	var tags []Tag
-	for _, key := range gitTagOrder {
+	for _, key := range knownTagOrder {
 		if value, ok := found[key]; ok {
 			tags = append(tags, Tag{Key: key, Value: value})
 		}

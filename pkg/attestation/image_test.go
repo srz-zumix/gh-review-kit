@@ -240,3 +240,45 @@ func TestEmbedAndReadGitMetadataPNGEndToEnd(t *testing.T) {
 		t.Fatalf("ReadGitMetadata tags = %v, want %v", readResult.Tags, embedResult.Tags)
 	}
 }
+
+func TestEmbedAndReadGitMetadataPNGWithComment(t *testing.T) {
+	dir := initRepo(t)
+	in := filepath.Join(dir, "input.png")
+	if err := os.WriteFile(in, samplePNG(t), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	out := filepath.Join(dir, "output.png")
+
+	ctx := context.Background()
+	embedResult, err := EmbedGitMetadata(ctx, EmbedOptions{Input: in, Output: out, RepoDir: dir, Comment: "pre-release build"})
+	if err != nil {
+		t.Fatalf("EmbedGitMetadata: %v", err)
+	}
+	if len(embedResult.Warnings) != 0 {
+		t.Fatalf("unexpected warnings: %v", embedResult.Warnings)
+	}
+	last := embedResult.Tags[len(embedResult.Tags)-1]
+	if last.Key != CommentTag || last.Value != "pre-release build" {
+		t.Fatalf("expected trailing comment tag, got %v", last)
+	}
+
+	readResult, err := ReadGitMetadata(ctx, ReadOptions{Input: out})
+	if err != nil {
+		t.Fatalf("ReadGitMetadata: %v", err)
+	}
+	if len(readResult.Tags) != len(embedResult.Tags) {
+		t.Fatalf("ReadGitMetadata tags = %v, want %v", readResult.Tags, embedResult.Tags)
+	}
+	found := false
+	for _, tag := range readResult.Tags {
+		if tag.Key == CommentTag {
+			found = true
+			if tag.Value != "pre-release build" {
+				t.Fatalf("comment tag value = %q, want %q", tag.Value, "pre-release build")
+			}
+		}
+	}
+	if !found {
+		t.Fatal("expected comment tag to be read back")
+	}
+}
