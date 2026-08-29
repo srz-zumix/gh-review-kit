@@ -63,6 +63,9 @@ type EmbedOptions struct {
 	// RepoDir is the Git repository directory to collect provenance from.
 	// When empty, the current directory is used.
 	RepoDir string
+	// Comment is an optional freeform comment embedded alongside the Git
+	// provenance tags under CommentTag. When empty, no comment tag is added.
+	Comment string
 	// Force allows overwriting an existing Output file.
 	Force bool
 }
@@ -124,6 +127,9 @@ func embedGitMetadata(ctx context.Context, opts EmbedOptions, runner commandRunn
 		return nil, fmt.Errorf("failed to collect git metadata: %w", err)
 	}
 	tags := meta.Tags()
+	if opts.Comment != "" {
+		tags = append(tags, Tag{Key: CommentTag, Value: opts.Comment})
+	}
 
 	outputDir := filepath.Dir(opts.Output)
 	ext := filepath.Ext(opts.Output)
@@ -283,6 +289,21 @@ func ffmpegArgs(input, output string, tags []Tag) []string {
 	for _, tag := range tags {
 		args = append(args, "-metadata", fmt.Sprintf("%s=%s", tag.Key, tag.Value))
 	}
+	// -map_metadata 0 copies the input's global metadata, so a previously
+	// embedded comment would survive a re-embed that supplies no --comment.
+	// Emit an empty value to delete any inherited comment, keeping re-embedding
+	// authoritative and consistent with the PNG/JPEG paths (which strip known
+	// tags before writing).
+	hasComment := false
+	for _, tag := range tags {
+		if tag.Key == CommentTag {
+			hasComment = true
+			break
+		}
+	}
+	if !hasComment {
+		args = append(args, "-metadata", CommentTag+"=")
+	}
 	if movFamilyExtensions[strings.ToLower(filepath.Ext(output))] {
 		args = append(args, "-movflags", "use_metadata_tags")
 	}
@@ -318,29 +339,6 @@ func verifyTags(ctx context.Context, runner commandRunner, ffprobePath, path str
 	}
 
 	return warningsForMismatch(tags, probed.Format.Tags), nil
-}
-
-// gitTagOrder lists the known Git provenance metadata keys, in the same
-// order as GitMetadata.Tags, so ReadGitMetadata reports them consistently.
-var gitTagOrder = []string{
-	GitTagCommit,
-	GitTagBranch,
-	GitTagDirty,
-	GitTagCommitDate,
-	GitTagAuthor,
-	GitTagRepository,
-}
-
-// isGitTagKey reports whether key is one of the known Git provenance metadata
-// keys, so embedders can strip stale provenance chunks/segments before writing
-// fresh ones and re-embedding stays authoritative.
-func isGitTagKey(key string) bool {
-	for _, k := range gitTagOrder {
-		if k == key {
-			return true
-		}
-	}
-	return false
 }
 
 // ReadOptions configures ReadGitMetadata.
@@ -419,13 +417,7 @@ func readVideoGitMetadata(ctx context.Context, runner commandRunner, input strin
 		return nil, fmt.Errorf("failed to parse ffprobe output for %q: %w", input, err)
 	}
 
-	var tags []Tag
-	for _, key := range gitTagOrder {
-		if value, ok := probed.Format.Tags[key]; ok {
-			tags = append(tags, Tag{Key: key, Value: value})
-		}
-	}
-	return tags, nil
+	return orderedKnownTags(probed.Format.Tags), nil
 }
 
 // publishNoReplace writes the staged file at tmpPath to output without ever

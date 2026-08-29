@@ -65,8 +65,8 @@ func embedImageTags(format imageFormat, data []byte, tags []Tag) ([]byte, error)
 	}
 }
 
-// readImageTags reads previously embedded Git provenance tags from data,
-// returning only the entries matching gitTagOrder.
+// readImageTags reads previously embedded metadata tags from data, returning
+// only the entries matching knownTagOrder.
 func readImageTags(format imageFormat, data []byte) ([]Tag, error) {
 	switch format {
 	case imageFormatPNG:

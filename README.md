@@ -48,10 +48,10 @@ gh review-kit rerequest 123 --read-only
 #### Embed Git provenance metadata into a video or image
 
 ```sh
-gh review-kit attestation set <input-file> -o OUTPUT [-C DIR | --repo-dir DIR] [--force] [--format FORMAT]
+gh review-kit attestation set <input-file> -o OUTPUT [-C DIR | --repo-dir DIR] [--comment TEXT] [--force] [--format FORMAT]
 ```
 
-Collect Git information (commit, branch, dirty state, commit date, and repository) from a local Git repository and embed it as metadata tags into a copy of the input file. For video files, FFmpeg stream-copies all media without transcoding, preserving existing streams, metadata, and chapters on a best-effort basis, and the embedded tags are verified with `ffprobe` before the output file is written; a container that cannot retain custom metadata keys produces warnings rather than a failure. For PNG and JPEG files, tags are embedded natively (PNG `iTXt` chunks (UTF-8 text) or JPEG COM segments) without invoking FFmpeg.
+Collect Git information (commit, branch, dirty state, commit date, and repository) from a local Git repository and embed it as metadata tags into a copy of the input file, together with an optional freeform comment (`--comment`). For video files, FFmpeg stream-copies all media without transcoding, preserving existing streams, metadata, and chapters on a best-effort basis, and the embedded tags are verified with `ffprobe` before the output file is written; a container that cannot retain custom metadata keys produces warnings rather than a failure. For PNG and JPEG files, tags are embedded natively (PNG `iTXt` chunks (UTF-8 text) or JPEG COM segments) without invoking FFmpeg.
 
 This embeds unsigned provenance metadata only. It is not a cryptographic signature, GitHub artifact attestation, or tamper-proof claim.
 
@@ -61,6 +61,7 @@ Requires `ffmpeg` and `ffprobe` to be available on `PATH` for video files; PNG a
 
 | Tag | Description |
 | --- | --- |
+| `attestation.comment` | Freeform comment supplied via `--comment` (only present when `--comment` is given) |
 | `git.author` | Identity of the user running the attestation command, in `Name <email>` format (from `git config user.name`/`user.email`) |
 | `git.branch` | Current branch name, or `detached` when HEAD is not on any branch |
 | `git.commit` | Full HEAD commit SHA |
@@ -70,6 +71,7 @@ Requires `ffmpeg` and `ffprobe` to be available on `PATH` for video files; PNG a
 
 **Options:**
 
+- `--comment`: Freeform comment to embed alongside the Git provenance tags (optional, default: none)
 - `--force`: Overwrite the output file if it already exists (optional, default: false)
 - `--format`: Output format: `text`, `json` (optional, default: `text`)
 - `-o`, `--output`: Output file path (required)
@@ -89,6 +91,9 @@ gh review-kit attestation set input.mp4 --output output.mp4 --force
 
 # Embed provenance into a PNG or JPEG image (no ffmpeg required)
 gh review-kit attestation set input.png --output output.png
+
+# Embed provenance together with a freeform comment
+gh review-kit attestation set input.mp4 --output output.mp4 --comment "pre-release build"
 ```
 
 #### Display Git provenance metadata embedded in a video or image
