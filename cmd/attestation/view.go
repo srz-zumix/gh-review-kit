@@ -75,8 +75,9 @@ It supports three modes, mutually exclusive with each other:
     Assets with no embedded attestation are listed with empty metadata
     columns rather than causing an error.
 
-Output defaults to a table; use --format text for the previous "key=value"
-line-per-tag output (single-file/asset-URL modes only).
+Output defaults to a table; use --format text for "key=value"
+line-per-tag output. In --pr mode, --format text prints one such block per
+file found, separated by blank lines.
 
 Requires ffprobe to be available on PATH for video files; PNG and JPEG
 files have no external tool dependency.`,
@@ -107,6 +108,9 @@ files have no external tool dependency.`,
 					return fmt.Errorf("failed to read attestation from pull request %q assets: %w", pr, err)
 				}
 
+				if format == "text" {
+					return attestation.RenderPRAssetsText(r, assets)
+				}
 				return attestation.RenderPRAssets(r, assets)
 			}
 
@@ -155,4 +159,3 @@ files have no external tool dependency.`,
 
 	return cmd
 }
-

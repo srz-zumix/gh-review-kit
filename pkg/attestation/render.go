@@ -50,6 +50,34 @@ func RenderPRAssets(r *render.Renderer, assets []*PRAsset) error {
 	return tw.Render()
 }
 
+// RenderPRAssetsText renders assets found while scanning a pull request
+// (attestation view --pr --format text) as one "key=value" block per file,
+// separated by blank lines, or as exported data (e.g. JSON) when r has an
+// exporter configured. Assets with no embedded attestation or a read error
+// are noted instead of listing tags.
+func RenderPRAssetsText(r *render.Renderer, assets []*PRAsset) error {
+	if r.HasExporter() {
+		return r.RenderExportedData(assets)
+	}
+	for i, asset := range assets {
+		if i > 0 {
+			r.WriteLine("")
+		}
+		r.WriteLine(fmt.Sprintf("%s (%s)", asset.Filename, asset.locationLabel()))
+		switch {
+		case asset.Error != "":
+			r.WriteLine(fmt.Sprintf("error=%s", asset.Error))
+		case !asset.Attested:
+			r.WriteLine("no attestation found")
+		default:
+			for _, tag := range asset.Tags {
+				r.WriteLine(fmt.Sprintf("%s=%s", tag.Key, tag.Value))
+			}
+		}
+	}
+	return nil
+}
+
 // tagsTableRow builds a table row for the shared FILENAME/LOCATION/COMMIT/
 // BRANCH/AUTHOR/COMMENT column layout, leaving cells for tags that were not
 // found empty.
