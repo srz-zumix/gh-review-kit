@@ -75,9 +75,8 @@ It supports three modes, mutually exclusive with each other:
     Assets with no embedded attestation are listed with empty metadata
     columns rather than causing an error.
 
-Output defaults to a table; use --format text for "key=value"
-line-per-tag output. In --pr mode, --format text prints one such block per
-file found, separated by blank lines.
+Output defaults to "key=value" lines, one per tag. In --pr mode, one such
+block is printed per file found, separated by blank lines.
 
 Requires ffprobe to be available on PATH for video files; PNG and JPEG
 files have no external tool dependency.`,
@@ -108,10 +107,7 @@ files have no external tool dependency.`,
 					return fmt.Errorf("failed to read attestation from pull request %q assets: %w", pr, err)
 				}
 
-				if format == "text" {
-					return attestation.RenderPRAssetsText(r, assets)
-				}
-				return attestation.RenderPRAssets(r, assets)
+				return attestation.RenderPRAssetsText(r, assets)
 			}
 
 			input := args[0]
@@ -133,27 +129,21 @@ files have no external tool dependency.`,
 				if err != nil {
 					return fmt.Errorf("failed to read git metadata from %q: %w", input, err)
 				}
-				if format == "text" {
-					return attestation.Render(r, tags)
-				}
-				return attestation.RenderTagsTable(r, input, tags)
+				return attestation.Render(r, tags)
 			}
 
 			result, err := readGitMetadata(ctx, attestation.ReadOptions{Input: input})
 			if err != nil {
 				return fmt.Errorf("failed to read git metadata from %q: %w", input, err)
 			}
-			if format == "text" {
-				return attestation.Render(r, result.Tags)
-			}
-			return attestation.RenderTagsTable(r, input, result.Tags)
+			return attestation.Render(r, result.Tags)
 		},
 	}
 
 	f := cmd.Flags()
 	f.StringVarP(&repo, "repo", "R", "", "Repository to use for GitHub API access ([HOST/]OWNER/REPO, default: current repository or derived from --pr/the asset URL)")
 	f.StringVar(&pr, "pr", "", "Scan a pull request's attachments for Git provenance metadata (number, URL, or branch name; mutually exclusive with <input-file>/<asset-url>)")
-	if err := cmdflags.AddFormatFlags(cmd, &exporter, &format, "table", []string{"text", "table"}); err != nil {
+	if err := cmdflags.AddFormatFlags(cmd, &exporter, &format, "text", []string{"text"}); err != nil {
 		panic(err)
 	}
 

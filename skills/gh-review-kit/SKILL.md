@@ -113,7 +113,7 @@ gh review-kit attestation set input.mp4 --output output.mp4 --comment "pre-relea
 
 ## Display Git Provenance Metadata Embedded in a Video or Image (attestation view)
 
-Read the metadata tags previously embedded by `attestation set`, without modifying the file. Video files are probed with `ffprobe`; PNG and JPEG files are read natively. Supports three mutually exclusive modes: a local file path, a GitHub-hosted asset URL (e.g. a file pasted into a pull request), or `--pr` to scan a pull request's body, issue comments, and review comments for GitHub-hosted asset URLs and read metadata from each one found. In `--pr` mode, assets with no embedded attestation are listed with empty metadata columns (or, with `--format text`, a "no attestation found" note) rather than causing an error.
+Read the metadata tags previously embedded by `attestation set`, without modifying the file. Video files are probed with `ffprobe`; PNG and JPEG files are read natively. Supports three mutually exclusive modes: a local file path, a GitHub-hosted asset URL (e.g. a file pasted into a pull request), or `--pr` to scan a pull request's body, issue comments, and review comments for GitHub-hosted asset URLs and read metadata from each one found. In `--pr` mode, assets with no embedded attestation are listed with a "no attestation found" note rather than causing an error.
 
 ```bash
 gh review-kit attestation view [<input-file> | <asset-url>] [flags]
@@ -123,20 +123,9 @@ gh review-kit attestation view [<input-file> | <asset-url>] [flags]
 
 | Flag | Description |
 | --- | --- |
-| `--format` | Output format: `table`, `text`, `json` (default: `table`); `text` renders `key=value` lines, one block per file in `--pr` mode |
+| `--format` | Output format: `text`, `json` (default: `text`); `text` renders `key=value` lines, one block per file in `--pr` mode |
 | `--pr` | Scan a pull request's attachments for Git provenance metadata (number, URL, or branch name; mutually exclusive with `<input-file>`/`<asset-url>`) |
 | `-R`, `--repo` | Repository to use for GitHub API access, `[HOST/]OWNER/REPO` (default: current repository, or derived from `--pr`/the asset URL) |
-
-### Table Columns (`--pr` mode, and single-item modes with the default `table` format)
-
-| Column | Description |
-| --- | --- |
-| `AUTHOR` | `git.author` tag value |
-| `BRANCH` | `git.branch` tag value |
-| `COMMENT` | `attestation.comment` tag value |
-| `COMMIT` | `git.commit` tag value, shortened to 8 characters |
-| `FILENAME` | Asset filename, or the local file path/asset URL argument in single-item mode |
-| `LOCATION` | `body`, `issue_comment#<id>`, or `review_comment#<id>` (empty in single-item mode) |
 
 ### Examples
 
@@ -149,9 +138,6 @@ gh review-kit attestation view https://github.com/user-attachments/assets/000000
 
 # Scan all attachments in a pull request for provenance metadata
 gh review-kit attestation view --pr 123
-
-# Scan a pull request's attachments, one key=value block per file
-gh review-kit attestation view --pr 123 --format text
 
 # Scan a pull request in a different repository, as JSON
 gh review-kit attestation view --pr 123 -R owner/repo --format json
