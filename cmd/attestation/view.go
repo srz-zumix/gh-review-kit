@@ -72,11 +72,15 @@ It supports three modes, mutually exclusive with each other:
     a pull request) to a temporary location and read its metadata.
   - --pr: scan a pull request's body, issue comments, and review comments
     for GitHub-hosted asset URLs, and read metadata from each one found.
-    Assets with no embedded attestation are listed with empty metadata
-    columns rather than causing an error.
+    Assets with no embedded attestation are listed with a "no attestation
+    found" note; per-asset download or read failures are shown as
+    "error=<message>" rather than aborting the scan.
 
-Output defaults to "key=value" lines, one per tag. In --pr mode, one such
-block is printed per file found, separated by blank lines.
+Output defaults to "key=value" lines, one per tag. In --pr text output, each
+asset is rendered as a block beginning with a "<filename> (<location>)"
+header, followed by its "key=value" tags, "no attestation found", or
+"error=<message>", with blocks separated by blank lines. Exporter modes
+(--json/--jq/--template) produce structured data instead.
 
 Requires ffprobe to be available on PATH for video files; PNG and JPEG
 files have no external tool dependency.`,

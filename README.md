@@ -107,7 +107,7 @@ Requires `ffprobe` to be available on `PATH` for video files; PNG and JPEG files
 
 **Options:**
 
-- `--format`: Output format: `text`, `json` (optional, default: `text`); `text` renders `key=value` lines, one block per file in `--pr` mode
+- `--format`: Output format: `text`, `json` (optional, default: `text`); `text` renders `key=value` lines. In `--pr` mode each asset is a block starting with a `<filename> (<location>)` header, followed by its tags, `no attestation found`, or `error=<message>`
 - `--pr`: Scan a pull request's attachments for Git provenance metadata (number, URL, or branch name; optional, mutually exclusive with `<input-file>`/`<asset-url>`)
 - `-R`, `--repo`: Repository to use for GitHub API access, `[HOST/]OWNER/REPO` (optional, default: current repository, or derived from `--pr`/the asset URL)
 
