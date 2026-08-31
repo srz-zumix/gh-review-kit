@@ -8,7 +8,7 @@ import (
 	"github.com/srz-zumix/go-gh-extension/pkg/render"
 )
 
-func TestRenderPRAssetsTextPerFile(t *testing.T) {
+func TestRenderPRAssets_Text(t *testing.T) {
 	sr := render.NewStringRenderer(nil)
 	assets := []*PRAsset{
 		{
@@ -34,8 +34,8 @@ func TestRenderPRAssetsTextPerFile(t *testing.T) {
 		},
 	}
 
-	if err := RenderPRAssetsText(&sr.Renderer, assets); err != nil {
-		t.Fatalf("RenderPRAssetsText: %v", err)
+	if err := RenderPRAssets(&sr.Renderer, assets); err != nil {
+		t.Fatalf("RenderPRAssets: %v", err)
 	}
 
 	got := sr.Stdout.String()
@@ -50,12 +50,12 @@ func TestRenderPRAssetsTextPerFile(t *testing.T) {
 	}
 }
 
-func TestRenderPRAssetsTextJSON(t *testing.T) {
+func TestRenderPRAssets_JSON(t *testing.T) {
 	sr := render.NewStringRenderer(cmdutil.NewJSONExporter())
 	assets := []*PRAsset{{Filename: "attested.png", Location: LocationBody, Attested: true}}
 
-	if err := RenderPRAssetsText(&sr.Renderer, assets); err != nil {
-		t.Fatalf("RenderPRAssetsText(json): %v", err)
+	if err := RenderPRAssets(&sr.Renderer, assets); err != nil {
+		t.Fatalf("RenderPRAssets(json): %v", err)
 	}
 
 	got := sr.Stdout.String()

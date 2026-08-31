@@ -46,6 +46,28 @@ func assetHostFromURL(assetURL string) string {
 	}
 }
 
+// resolveAssetHost determines the repository (host) whose authenticated client
+// should fetch an asset URL. An explicit --repo takes precedence; when it is
+// set but cannot be parsed the error is surfaced rather than being silently
+// ignored. When no usable repository is available (no --repo and no current
+// repository), the host is derived from the asset URL itself.
+func resolveAssetHost(repo, assetURL string) (repository.Repository, error) {
+	resolved, err := parser.Repository(parser.RepositoryInput(repo))
+	if err != nil {
+		if repo != "" {
+			return repository.Repository{}, fmt.Errorf("failed to resolve repository %q: %w", repo, err)
+		}
+		resolved = repository.Repository{}
+	}
+	if resolved.Host == "" {
+		resolved = repository.Repository{Host: assetHostFromURL(assetURL)}
+	}
+	if resolved.Host == "" {
+		return repository.Repository{}, fmt.Errorf("failed to determine the GitHub host for %q; specify --repo", assetURL)
+	}
+	return resolved, nil
+}
+
 // NewViewCmd creates a new command to display Git provenance metadata
 // embedded in a video, PNG, or JPEG file, whether stored locally, hosted at
 // a GitHub asset URL, or attached to a pull request.
@@ -79,8 +101,9 @@ It supports three modes, mutually exclusive with each other:
 Output defaults to "key=value" lines, one per tag. In --pr text output, each
 asset is rendered as a block beginning with a "<filename> (<location>)"
 header, followed by its "key=value" tags, "no attestation found", or
-"error=<message>", with blocks separated by blank lines. Exporter modes
-(--json/--jq/--template) produce structured data instead.
+"error=<message>", with blocks separated by blank lines. The json format
+(--format json, optionally with --jq/--template) produces structured data
+instead.
 
 Requires ffprobe to be available on PATH for video files; PNG and JPEG
 files have no external tool dependency.`,
@@ -108,20 +131,17 @@ files have no external tool dependency.`,
 
 				assets, err := readPRAssets(ctx, client, attestation.PRAssetOptions{Repo: resolvedRepo, PR: pr})
 				if err != nil {
-					return fmt.Errorf("failed to read attestation from pull request %q assets: %w", pr, err)
+					return fmt.Errorf("failed to scan pull request %q for attestations: %w", pr, err)
 				}
 
-				return attestation.RenderPRAssetsText(r, assets)
+				return attestation.RenderPRAssets(r, assets)
 			}
 
 			input := args[0]
 			if strings.HasPrefix(input, "http://") || strings.HasPrefix(input, "https://") {
-				resolved, err := parser.Repository(parser.RepositoryInputOptional(repo))
-				if err != nil || resolved.Host == "" {
-					resolved = repository.Repository{Host: assetHostFromURL(input)}
-				}
-				if resolved.Host == "" {
-					return fmt.Errorf("failed to determine the GitHub host for %q; specify --repo", input)
+				resolved, err := resolveAssetHost(repo, input)
+				if err != nil {
+					return err
 				}
 
 				client, err := gh.NewGitHubClientWithRepo(resolved)

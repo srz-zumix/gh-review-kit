@@ -18,12 +18,12 @@ func Render(r *render.Renderer, tags []Tag) error {
 	return nil
 }
 
-// RenderPRAssetsText renders assets found while scanning a pull request
-// (attestation view --pr --format text) as one "key=value" block per file,
-// separated by blank lines, or as exported data (e.g. JSON) when r has an
-// exporter configured. Assets with no embedded attestation or a read error
-// are noted instead of listing tags.
-func RenderPRAssetsText(r *render.Renderer, assets []*PRAsset) error {
+// RenderPRAssets renders assets found while scanning a pull request
+// (attestation view --pr) as one "key=value" block per file, separated by
+// blank lines, or as exported data (e.g. JSON) when r has an exporter
+// configured. Assets with no embedded attestation or a read error are noted
+// instead of listing tags.
+func RenderPRAssets(r *render.Renderer, assets []*PRAsset) error {
 	if r.HasExporter() {
 		return r.RenderExportedData(assets)
 	}
