@@ -30,6 +30,39 @@ var readAssetURL = attestation.ReadAssetURL
 // implementation without calling the GitHub API.
 var readPRAssets = attestation.ReadPRAssets
 
+// classifyAsset determines whether input is an http(s) asset URL rather than a
+// local file path. It returns (normalizedURL, true, nil) for a valid asset URL
+// with its scheme canonicalized to lower case (net/http only accepts lower-case
+// "http"/"https"), ("", false, nil) for a local file path or a non-http scheme,
+// and ("", false, err) for a malformed http(s) URL so the failure surfaces
+// instead of being misread as a file path.
+func classifyAsset(input string) (string, bool, error) {
+	u, err := url.Parse(input)
+	if err != nil {
+		if hasHTTPSchemePrefix(input) {
+			return "", false, fmt.Errorf("invalid asset URL %q: %w", input, err)
+		}
+		return "", false, nil
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "http", "https":
+		if u.Host == "" {
+			return "", false, fmt.Errorf("invalid asset URL %q: missing host", input)
+		}
+		u.Scheme = strings.ToLower(u.Scheme)
+		return u.String(), true, nil
+	default:
+		return "", false, nil
+	}
+}
+
+// hasHTTPSchemePrefix reports whether s begins with an http:// or https://
+// scheme, case-insensitively.
+func hasHTTPSchemePrefix(s string) bool {
+	ls := strings.ToLower(s)
+	return strings.HasPrefix(ls, "http://") || strings.HasPrefix(ls, "https://")
+}
+
 // githubComAssetHost reports whether u is a github.com-hosted asset URL and,
 // if so, returns the authentication authority host ("github.com"). The
 // dedicated user-attachment CDN hostnames serve assets on behalf of github.com
@@ -62,8 +95,11 @@ func githubComAssetHost(u *url.URL) string {
 // --repo in that case.
 func resolveAssetHost(repo, assetURL string) (repository.Repository, error) {
 	u, err := url.Parse(assetURL)
-	if err != nil || u.Hostname() == "" {
-		return repository.Repository{}, fmt.Errorf("invalid asset URL %q", assetURL)
+	if err != nil {
+		return repository.Repository{}, fmt.Errorf("invalid asset URL %q: %w", assetURL, err)
+	}
+	if u.Hostname() == "" {
+		return repository.Repository{}, fmt.Errorf("invalid asset URL %q: missing host", assetURL)
 	}
 	// Require HTTPS so a token is never transmitted in cleartext when the
 	// request host matches the resolved authentication authority.
@@ -97,10 +133,11 @@ func resolveAssetHost(repo, assetURL string) (repository.Repository, error) {
 // a GitHub asset URL, or attached to a pull request.
 func NewViewCmd() *cobra.Command {
 	var (
-		repo     string
-		pr       string
-		format   string
-		exporter cmdutil.Exporter
+		repo         string
+		pr           string
+		maxAssetSize int64
+		format       string
+		exporter     cmdutil.Exporter
 	)
 
 	cmd := &cobra.Command{
@@ -142,6 +179,9 @@ files have no external tool dependency.`,
 			if pr == "" && len(args) == 0 {
 				return fmt.Errorf("requires exactly one of <input-file>, <asset-url>, or --pr")
 			}
+			if maxAssetSize < 0 {
+				return fmt.Errorf("--max-asset-size must be zero or a positive number of bytes")
+			}
 
 			if pr != "" {
 				resolvedRepo, err := parser.Repository(parser.RepositoryInput(repo), parser.RepositoryFromURL(pr))
@@ -153,7 +193,7 @@ files have no external tool dependency.`,
 					return fmt.Errorf("failed to create GitHub client: %w", err)
 				}
 
-				assets, err := readPRAssets(ctx, client, attestation.PRAssetOptions{Repo: resolvedRepo, PR: pr})
+				assets, err := readPRAssets(ctx, client, attestation.PRAssetOptions{Repo: resolvedRepo, PR: pr, MaxAssetSize: maxAssetSize})
 				if err != nil {
 					return fmt.Errorf("failed to scan pull request %q for attestations: %w", pr, err)
 				}
@@ -162,8 +202,12 @@ files have no external tool dependency.`,
 			}
 
 			input := args[0]
-			if strings.HasPrefix(input, "http://") || strings.HasPrefix(input, "https://") {
-				resolved, err := resolveAssetHost(repo, input)
+			assetURL, isURL, err := classifyAsset(input)
+			if err != nil {
+				return err
+			}
+			if isURL {
+				resolved, err := resolveAssetHost(repo, assetURL)
 				if err != nil {
 					return err
 				}
@@ -173,7 +217,7 @@ files have no external tool dependency.`,
 					return fmt.Errorf("failed to create GitHub client: %w", err)
 				}
 
-				tags, err := readAssetURL(ctx, client, resolved.Host, input)
+				tags, err := readAssetURL(ctx, client, resolved.Host, assetURL)
 				if err != nil {
 					return fmt.Errorf("failed to read git metadata from %q: %w", input, err)
 				}
@@ -189,8 +233,9 @@ files have no external tool dependency.`,
 	}
 
 	f := cmd.Flags()
-	f.StringVarP(&repo, "repo", "R", "", "Repository to use for GitHub API access ([HOST/]OWNER/REPO, default: current repository or derived from --pr/the asset URL)")
+	f.StringVarP(&repo, "repo", "R", "", "Repository for GitHub authentication (PR API access and asset downloads), [HOST/]OWNER/REPO (default: current repository or derived from --pr/the asset URL)")
 	f.StringVar(&pr, "pr", "", "Scan a pull request's attachments for Git provenance metadata (number, URL, or branch name; mutually exclusive with <input-file>/<asset-url>)")
+	f.Int64Var(&maxAssetSize, "max-asset-size", 0, "In --pr mode, skip assets whose server-reported size exceeds this many bytes instead of downloading them (0: no limit)")
 	if err := cmdflags.AddFormatFlags(cmd, &exporter, &format, "text", []string{"text"}); err != nil {
 		panic(err)
 	}

@@ -26,7 +26,7 @@ gh review-kit --version
 gh auth login
 ```
 
-The `attestation set` command does not call the GitHub API or require GitHub authentication, but it does require a local Git repository plus `ffmpeg` and `ffprobe` on `PATH`. The `attestation view` command requires `ffprobe` on `PATH` for video files; its `<asset-url>` and `--pr` modes additionally call the GitHub API and require GitHub authentication.
+The `attestation set` command does not call the GitHub API or require GitHub authentication, but it does require a local Git repository plus `ffmpeg` and `ffprobe` on `PATH`. The `attestation view` command requires `ffprobe` on `PATH` for video files. Its `--pr` mode calls the GitHub API (to read the pull request and its comments) and downloads the referenced GitHub-hosted assets, so it requires GitHub authentication. Its `<asset-url>` mode does not call the GitHub API; it downloads a single GitHub-hosted asset over HTTP using an authentication-aware client, which may require GitHub authentication for private assets.
 
 ## CLI Structure
 
@@ -124,8 +124,9 @@ gh review-kit attestation view [<input-file> | <asset-url>] [flags]
 | Flag | Description |
 | --- | --- |
 | `--format` | Output format: `text`, `json` (default: `text`); `text` renders `key=value` lines. In `--pr` mode each asset is a block starting with a `<filename> (<location>)` header, followed by its tags, `no attestation found`, or `error=<message>` |
+| `--max-asset-size` | In `--pr` mode, skip assets whose server-reported size exceeds this many bytes instead of downloading them (default: `0` = no limit) |
 | `--pr` | Scan a pull request's attachments for Git provenance metadata (number, URL, or branch name; mutually exclusive with `<input-file>`/`<asset-url>`) |
-| `-R`, `--repo` | Repository to use for GitHub API access, `[HOST/]OWNER/REPO` (default: current repository, or derived from `--pr`/the asset URL) |
+| `-R`, `--repo` | Repository for GitHub authentication (`--pr` API access and asset downloads), `[HOST/]OWNER/REPO` (default: current repository, or derived from `--pr`/the asset URL) |
 
 ### Examples
 

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/srz-zumix/go-gh-extension/pkg/gh"
@@ -91,7 +92,7 @@ func TestFetchPRAssetsWithAndWithoutAttestation(t *testing.T) {
 		{url: server.URL + "/missing.png", filename: "missing.png", location: LocationReviewComment, locationID: 2},
 	}
 
-	assets, err := fetchPRAssets(context.Background(), server.Client(), "github.com", 7, "https://github.com/o/r/pull/7", scanned)
+	assets, err := fetchPRAssets(context.Background(), server.Client(), "github.com", 7, "https://github.com/o/r/pull/7", scanned, 0)
 	if err != nil {
 		t.Fatalf("fetchPRAssets: %v", err)
 	}
@@ -139,8 +140,48 @@ func TestFetchPRAssetsWithAndWithoutAttestation(t *testing.T) {
 	}
 }
 
+func TestFetchPRAssetsSkipsOversizedAsset(t *testing.T) {
+	var downloaded bool
+	mux := http.NewServeMux()
+	mux.HandleFunc("/big.png", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", "1000")
+		if r.Method == http.MethodHead {
+			return
+		}
+		downloaded = true
+		_, _ = w.Write(make([]byte, 1000))
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	scanned := []scannedAsset{
+		{url: server.URL + "/big.png", filename: "big.png", location: LocationBody},
+	}
+
+	assets, err := fetchPRAssets(context.Background(), server.Client(), "github.com", 7, "", scanned, 100)
+	if err != nil {
+		t.Fatalf("fetchPRAssets: %v", err)
+	}
+	if len(assets) != 1 {
+		t.Fatalf("fetchPRAssets returned %d assets, want 1", len(assets))
+	}
+	if downloaded {
+		t.Error("oversized asset was downloaded, want it skipped before download")
+	}
+	a := assets[0]
+	if a.Attested {
+		t.Error("oversized asset: Attested = true, want false")
+	}
+	if !strings.Contains(a.Error, "skipped") {
+		t.Errorf("oversized asset: Error = %q, want a skip message", a.Error)
+	}
+	if a.FileSize != 1000 {
+		t.Errorf("oversized asset: FileSize = %d, want 1000", a.FileSize)
+	}
+}
+
 func TestFetchPRAssetsEmpty(t *testing.T) {
-	assets, err := fetchPRAssets(context.Background(), http.DefaultClient, "github.com", 1, "", nil)
+	assets, err := fetchPRAssets(context.Background(), http.DefaultClient, "github.com", 1, "", nil, 0)
 	if err != nil {
 		t.Fatalf("fetchPRAssets: %v", err)
 	}
@@ -148,4 +189,3 @@ func TestFetchPRAssetsEmpty(t *testing.T) {
 		t.Errorf("fetchPRAssets(nil) = %v, want nil", assets)
 	}
 }
-

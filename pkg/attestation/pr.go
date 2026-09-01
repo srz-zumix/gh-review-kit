@@ -65,6 +65,9 @@ type PRAssetOptions struct {
 	Repo repository.Repository
 	// PR identifies the pull request by number, URL, or branch name.
 	PR string
+	// MaxAssetSize, when greater than zero, skips assets whose reported size
+	// exceeds this many bytes instead of downloading them.
+	MaxAssetSize int64
 }
 
 // scannedAsset is an asset URL found while scanning pull request text,
@@ -121,7 +124,7 @@ func scanAssetURLs(patterns []*regexp.Regexp, texts []scannedText) []scannedAsse
 // download or read failures are recorded on the asset rather than aborting
 // the scan. It has no GitHub API dependency beyond the plain HTTP client, so
 // it can be unit-tested against an httptest.Server.
-func fetchPRAssets(ctx context.Context, httpClient *http.Client, host string, prNumber int, prURL string, scanned []scannedAsset) ([]*PRAsset, error) {
+func fetchPRAssets(ctx context.Context, httpClient *http.Client, host string, prNumber int, prURL string, scanned []scannedAsset, maxAssetSize int64) ([]*PRAsset, error) {
 	if len(scanned) == 0 {
 		return nil, nil
 	}
@@ -160,6 +163,13 @@ func fetchPRAssets(ctx context.Context, httpClient *http.Client, host string, pr
 		}
 		asset.Filename = ioutil.SafeFilename(s.url, filename)
 
+		if maxAssetSize > 0 && meta.Size > maxAssetSize {
+			asset.Error = fmt.Sprintf("skipped: asset size %d bytes exceeds the limit of %d bytes", meta.Size, maxAssetSize)
+			logger.Warn(fmt.Sprintf("skipping asset %q: size %d bytes exceeds the limit of %d bytes", s.url, meta.Size, maxAssetSize))
+			assets = append(assets, asset)
+			continue
+		}
+
 		destPath := filepath.Join(tmpDir, fmt.Sprintf("%d-%s", i, asset.Filename))
 		if err := ioutil.DownloadFile(ctx, httpClient, s.url, destPath); err != nil {
 			asset.Error = err.Error()
@@ -169,6 +179,11 @@ func fetchPRAssets(ctx context.Context, httpClient *http.Client, host string, pr
 		}
 
 		result, err := ReadGitMetadata(ctx, ReadOptions{Input: destPath})
+		// Remove the downloaded file as soon as it is read so peak disk usage
+		// stays around a single asset instead of the whole pull request.
+		if rmErr := os.Remove(destPath); rmErr != nil && !os.IsNotExist(rmErr) {
+			logger.Warn(fmt.Sprintf("failed to remove temporary asset file %q: %v", destPath, rmErr))
+		}
 		switch {
 		case err == nil:
 			asset.Tags = result.Tags
@@ -218,7 +233,7 @@ func ReadPRAssets(ctx context.Context, g *gh.GitHubClient, opts PRAssetOptions) 
 	scanned := scanAssetURLs(patterns, texts)
 
 	httpClient := httputil.NewHostAwareClient(g.GetClient().Client(), opts.Repo.Host)
-	return fetchPRAssets(ctx, httpClient, opts.Repo.Host, pr.GetNumber(), pr.GetHTMLURL(), scanned)
+	return fetchPRAssets(ctx, httpClient, opts.Repo.Host, pr.GetNumber(), pr.GetHTMLURL(), scanned, opts.MaxAssetSize)
 }
 
 // ReadAssetURL downloads the asset at assetURL to a temporary file and reads
@@ -253,4 +268,3 @@ func ReadAssetURL(ctx context.Context, g *gh.GitHubClient, host, assetURL string
 	}
 	return result.Tags, nil
 }
-

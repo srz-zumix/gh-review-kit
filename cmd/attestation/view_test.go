@@ -5,6 +5,50 @@ import (
 	"testing"
 )
 
+func TestClassifyAsset(t *testing.T) {
+	// http(s) URLs are detected and their scheme is canonicalized to lower
+	// case (net/http rejects an upper-case scheme).
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"https://github.com/o/r/assets/1", "https://github.com/o/r/assets/1"},
+		{"HTTPS://github.com/o/r/assets/1", "https://github.com/o/r/assets/1"},
+		{"http://example.com/x.png", "http://example.com/x.png"},
+	}
+	for _, c := range cases {
+		got, ok, err := classifyAsset(c.in)
+		if err != nil {
+			t.Fatalf("classifyAsset(%q): %v", c.in, err)
+		}
+		if !ok {
+			t.Fatalf("classifyAsset(%q) ok = false, want true", c.in)
+		}
+		if got != c.want {
+			t.Fatalf("classifyAsset(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+
+	// Local file paths and non-http schemes are not asset URLs and are not errors.
+	for _, in := range []string{"output.mp4", "./dir/a.png", "/abs/path.png", "ftp://host/x", "C:/x.png"} {
+		got, ok, err := classifyAsset(in)
+		if err != nil {
+			t.Fatalf("classifyAsset(%q): unexpected error %v", in, err)
+		}
+		if ok {
+			t.Fatalf("classifyAsset(%q) = %q, ok = true, want false", in, got)
+		}
+	}
+
+	// Malformed http(s) URLs surface an error rather than being misread as a
+	// local file path.
+	for _, in := range []string{"https://", "https://github.com/%zz"} {
+		if _, ok, err := classifyAsset(in); err == nil {
+			t.Fatalf("classifyAsset(%q): expected error, got ok=%v", in, ok)
+		}
+	}
+}
+
 func TestResolveAssetHost(t *testing.T) {
 	// An explicit --repo is the authentication authority, even when its host
 	// differs from the asset URL host (the host-aware transport strips
