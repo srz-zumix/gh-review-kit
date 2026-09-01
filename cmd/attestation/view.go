@@ -30,42 +30,66 @@ var readAssetURL = attestation.ReadAssetURL
 // implementation without calling the GitHub API.
 var readPRAssets = attestation.ReadPRAssets
 
-// assetHostFromURL maps a GitHub-hosted asset URL to the host whose
-// authenticated client should be used to fetch it. The dedicated image CDN
-// hostnames used by github.com serve assets on behalf of github.com itself.
-func assetHostFromURL(assetURL string) string {
-	u, err := url.Parse(assetURL)
-	if err != nil {
-		return ""
-	}
-	switch u.Host {
-	case "user-images.githubusercontent.com", "private-user-images.githubusercontent.com":
+// githubComAssetHost reports whether u is a github.com-hosted asset URL and,
+// if so, returns the authentication authority host ("github.com"). The
+// dedicated user-attachment CDN hostnames serve assets on behalf of github.com
+// itself. It returns an empty string for any other host, which must not be
+// treated as a GitHub authentication authority.
+func githubComAssetHost(u *url.URL) string {
+	switch strings.ToLower(u.Hostname()) {
+	case "github.com", "www.github.com",
+		"user-images.githubusercontent.com", "private-user-images.githubusercontent.com":
 		return "github.com"
 	default:
-		return u.Host
+		return ""
 	}
 }
 
-// resolveAssetHost determines the repository (host) whose authenticated client
-// should fetch an asset URL. An explicit --repo takes precedence; when it is
-// set but cannot be parsed the error is surfaced rather than being silently
-// ignored. When no usable repository is available (no --repo and no current
-// repository), the host is derived from the asset URL itself.
+// resolveAssetHost determines the GitHub host whose authenticated client should
+// download an asset URL. The host is the authentication authority; the
+// host-aware transport applies credentials only when a request host matches it
+// and strips them otherwise, so a mismatch with a redirected CDN/storage host
+// is expected and safe. Precedence:
+//  1. An explicit --repo: its host is the authority. A parse error is surfaced
+//     rather than being silently ignored.
+//  2. Otherwise, a recognized github.com asset URL (including its
+//     user-attachment CDN hosts): github.com is the authority.
+//  3. Otherwise, the current repository's host, when available: this covers
+//     GitHub Enterprise Server assets served from a separate storage host.
+//
+// An arbitrary, unrecognized URL host is never adopted as the authority, so a
+// configured token is not sent to a non-GitHub server; the user must pass
+// --repo in that case.
 func resolveAssetHost(repo, assetURL string) (repository.Repository, error) {
-	resolved, err := parser.Repository(parser.RepositoryInput(repo))
-	if err != nil {
-		if repo != "" {
+	u, err := url.Parse(assetURL)
+	if err != nil || u.Hostname() == "" {
+		return repository.Repository{}, fmt.Errorf("invalid asset URL %q", assetURL)
+	}
+	// Require HTTPS so a token is never transmitted in cleartext when the
+	// request host matches the resolved authentication authority.
+	if !strings.EqualFold(u.Scheme, "https") {
+		return repository.Repository{}, fmt.Errorf("asset URL %q must use https", assetURL)
+	}
+
+	if repo != "" {
+		resolved, err := parser.Repository(parser.RepositoryInput(repo))
+		if err != nil {
 			return repository.Repository{}, fmt.Errorf("failed to resolve repository %q: %w", repo, err)
 		}
-		resolved = repository.Repository{}
+		if resolved.Host != "" {
+			return resolved, nil
+		}
 	}
-	if resolved.Host == "" {
-		resolved = repository.Repository{Host: assetHostFromURL(assetURL)}
+
+	if host := githubComAssetHost(u); host != "" {
+		return repository.Repository{Host: host}, nil
 	}
-	if resolved.Host == "" {
-		return repository.Repository{}, fmt.Errorf("failed to determine the GitHub host for %q; specify --repo", assetURL)
+
+	if current, err := parser.Repository(); err == nil && current.Host != "" {
+		return current, nil
 	}
-	return resolved, nil
+
+	return repository.Repository{}, fmt.Errorf("cannot determine a trusted GitHub host for %q; specify --repo", assetURL)
 }
 
 // NewViewCmd creates a new command to display Git provenance metadata
