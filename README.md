@@ -42,7 +42,6 @@ gh review-kit rerequest 123 --read-only
 
 ## Commands
 
-
 ### attestation
 
 #### Embed Git provenance metadata into a video or image
@@ -99,22 +98,34 @@ gh review-kit attestation set input.mp4 --output output.mp4 --comment "pre-relea
 #### Display Git provenance metadata embedded in a video or image
 
 ```sh
-gh review-kit attestation view <input-file> [--format FORMAT]
+gh review-kit attestation view [<input-file> | <asset-url>] [--pr PR] [-R REPO] [--max-asset-size N] [--format FORMAT]
 ```
 
-Read the metadata tags previously embedded by `attestation set`, without modifying the file. Video files are probed with `ffprobe`; PNG and JPEG files are read natively.
+Read the metadata tags previously embedded by `attestation set`, without modifying the file. Video files are probed with `ffprobe`; PNG and JPEG files are read natively. Supports three mutually exclusive modes: a local file path, a GitHub-hosted asset URL (e.g. a file pasted into a pull request), or `--pr` to scan a pull request's body, issue comments, and review comments for GitHub-hosted asset URLs and read metadata from each one found. In `--pr` mode, assets with no embedded attestation are listed with a "no attestation found" note rather than causing an error.
 
 Requires `ffprobe` to be available on `PATH` for video files; PNG and JPEG files have no external tool dependency.
 
 **Options:**
 
-- `--format`: Output format: `text`, `json` (optional, default: `text`)
+- `--format`: Output format: `text`, `json` (optional, default: `text`); `text` renders `key=value` lines. In `--pr` mode each asset is a block starting with a `<filename> (<location>)` header, followed by its tags, `no attestation found`, or `error=<message>`
+- `--max-asset-size`: In `--pr` mode, skip assets whose server-reported size exceeds this many bytes instead of downloading them (optional, default: `0` = no limit)
+- `--pr`: Scan a pull request's attachments for Git provenance metadata (number, URL, or branch name; optional, mutually exclusive with `<input-file>`/`<asset-url>`)
+- `-R`, `--repo`: Repository for GitHub authentication (`--pr` API access and asset downloads), `[HOST/]OWNER/REPO` (optional, default: current repository, or derived from `--pr`/the asset URL)
 
 **Examples:**
 
 ```sh
 # Display provenance metadata embedded in a video
 gh review-kit attestation view output.mp4
+
+# Display provenance metadata for a file pasted into a pull request
+gh review-kit attestation view https://github.com/user-attachments/assets/00000000-0000-0000-0000-000000000000
+
+# Scan all attachments in a pull request for provenance metadata
+gh review-kit attestation view --pr 123
+
+# Scan a pull request in a different repository, as JSON
+gh review-kit attestation view --pr 123 -R owner/repo --format json
 ```
 
 ### checks
@@ -689,4 +700,3 @@ gh review-kit reviewed --pr 123 path/to/generated_file.go
 # Mark files as viewed in a different repository
 gh review-kit reviewed --repo owner-name/repo-name --pr 123
 ```
-

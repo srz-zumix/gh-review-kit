@@ -389,10 +389,15 @@ func readGitMetadata(ctx context.Context, opts ReadOptions, runner commandRunner
 	}
 
 	if len(tags) == 0 {
-		return nil, fmt.Errorf("no git provenance metadata found in %q", opts.Input)
+		return nil, fmt.Errorf("%w in %q", ErrNoMetadata, opts.Input)
 	}
 	return &ReadResult{Tags: tags}, nil
 }
+
+// ErrNoMetadata is returned (wrapped) by ReadGitMetadata when the input file
+// has no embedded Git provenance metadata. Callers can distinguish this case
+// from other read failures via errors.Is.
+var ErrNoMetadata = errors.New("no git provenance metadata found")
 
 // readVideoGitMetadata reads the Git provenance metadata tags embedded in
 // input using ffprobe.

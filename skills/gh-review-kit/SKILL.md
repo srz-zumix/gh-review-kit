@@ -26,7 +26,7 @@ gh review-kit --version
 gh auth login
 ```
 
-The `attestation set` command does not call the GitHub API or require GitHub authentication, but it does require a local Git repository plus `ffmpeg` and `ffprobe` on `PATH`. The `attestation view` command only requires `ffprobe` on `PATH`.
+The `attestation set` command does not call the GitHub API or require GitHub authentication, but it does require a local Git repository plus `ffmpeg` and `ffprobe` on `PATH`. The `attestation view` command requires `ffprobe` on `PATH` for video files. Its `--pr` mode calls the GitHub API (to read the pull request and its comments) and downloads the referenced GitHub-hosted assets, so it requires GitHub authentication. Its `<asset-url>` mode does not call the GitHub API; it downloads a single GitHub-hosted asset over HTTP using an authentication-aware client, which may require GitHub authentication for private assets.
 
 ## CLI Structure
 
@@ -113,23 +113,35 @@ gh review-kit attestation set input.mp4 --output output.mp4 --comment "pre-relea
 
 ## Display Git Provenance Metadata Embedded in a Video or Image (attestation view)
 
-Read the metadata tags previously embedded by `attestation set`, without modifying the file. Video files are probed with `ffprobe`; PNG and JPEG files are read natively.
+Read the metadata tags previously embedded by `attestation set`, without modifying the file. Video files are probed with `ffprobe`; PNG and JPEG files are read natively. Supports three mutually exclusive modes: a local file path, a GitHub-hosted asset URL (e.g. a file pasted into a pull request), or `--pr` to scan a pull request's body, issue comments, and review comments for GitHub-hosted asset URLs and read metadata from each one found. In `--pr` mode, assets with no embedded attestation are listed with a "no attestation found" note rather than causing an error.
 
 ```bash
-gh review-kit attestation view <input-file> [flags]
+gh review-kit attestation view [<input-file> | <asset-url>] [flags]
 ```
 
 ### Options
 
 | Flag | Description |
 | --- | --- |
-| `--format` | Output format: `text`, `json` (default: `text`) |
+| `--format` | Output format: `text`, `json` (default: `text`); `text` renders `key=value` lines. In `--pr` mode each asset is a block starting with a `<filename> (<location>)` header, followed by its tags, `no attestation found`, or `error=<message>` |
+| `--max-asset-size` | In `--pr` mode, skip assets whose server-reported size exceeds this many bytes instead of downloading them (default: `0` = no limit) |
+| `--pr` | Scan a pull request's attachments for Git provenance metadata (number, URL, or branch name; mutually exclusive with `<input-file>`/`<asset-url>`) |
+| `-R`, `--repo` | Repository for GitHub authentication (`--pr` API access and asset downloads), `[HOST/]OWNER/REPO` (default: current repository, or derived from `--pr`/the asset URL) |
 
 ### Examples
 
 ```bash
 # Display provenance metadata embedded in a video
 gh review-kit attestation view output.mp4
+
+# Display provenance metadata for a file pasted into a pull request
+gh review-kit attestation view https://github.com/user-attachments/assets/00000000-0000-0000-0000-000000000000
+
+# Scan all attachments in a pull request for provenance metadata
+gh review-kit attestation view --pr 123
+
+# Scan a pull request in a different repository, as JSON
+gh review-kit attestation view --pr 123 -R owner/repo --format json
 ```
 
 ## List Check Runs (checks list)
