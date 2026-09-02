@@ -5,6 +5,41 @@ import (
 	"testing"
 )
 
+func TestIsGitHubAssetURL(t *testing.T) {
+	// Recognized github.com asset shapes.
+	valid := []string{
+		"https://github.com/user-attachments/assets/00000000-0000-0000-0000-000000000000",
+		"https://github.com/owner/repo/assets/12345",
+		"https://private-user-images.githubusercontent.com/1/2.png",
+		"https://user-images.githubusercontent.com/1/2.png",
+	}
+	for _, in := range valid {
+		if !isGitHubAssetURL("github.com", in) {
+			t.Errorf("isGitHubAssetURL(github.com, %q) = false, want true", in)
+		}
+	}
+
+	// Non-asset or foreign-host URLs are rejected, including substring smuggling.
+	invalid := []string{
+		"https://example.com/x.png",
+		"https://github.com/owner/repo/blob/main/x.png",
+		"https://evil.com/x?u=https://github.com/user-attachments/assets/00000000-0000-0000-0000-000000000000",
+	}
+	for _, in := range invalid {
+		if isGitHubAssetURL("github.com", in) {
+			t.Errorf("isGitHubAssetURL(github.com, %q) = true, want false", in)
+		}
+	}
+
+	// A GHES authority matches its own host's user-attachments shape but not github.com.
+	if !isGitHubAssetURL("ghe.example.com", "https://ghe.example.com/user-attachments/assets/abc") {
+		t.Error("isGitHubAssetURL(ghe.example.com, GHES asset) = false, want true")
+	}
+	if isGitHubAssetURL("ghe.example.com", "https://github.com/user-attachments/assets/abc") {
+		t.Error("isGitHubAssetURL(ghe.example.com, github.com asset) = true, want false")
+	}
+}
+
 func TestClassifyAsset(t *testing.T) {
 	// http(s) URLs are detected and their scheme is canonicalized to lower
 	// case (net/http rejects an upper-case scheme).

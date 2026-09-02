@@ -63,6 +63,20 @@ func hasHTTPSchemePrefix(s string) bool {
 	return strings.HasPrefix(ls, "http://") || strings.HasPrefix(ls, "https://")
 }
 
+// isGitHubAssetURL reports whether assetURL is a GitHub-hosted asset URL for
+// the given authentication authority host, matching the same URL shapes that
+// are recognized when scanning a pull request. The whole URL must match a
+// pattern (not merely contain one) so a foreign host cannot smuggle a matching
+// substring in its path or query.
+func isGitHubAssetURL(host, assetURL string) bool {
+	for _, p := range gh.BuildAssetURLPatterns(host) {
+		if p.FindString(assetURL) == assetURL {
+			return true
+		}
+	}
+	return false
+}
+
 // githubComAssetHost reports whether u is a github.com-hosted asset URL and,
 // if so, returns the authentication authority host ("github.com"). The
 // dedicated user-attachment CDN hostnames serve assets on behalf of github.com
@@ -210,6 +224,10 @@ files have no external tool dependency.`,
 				resolved, err := resolveAssetHost(repo, assetURL)
 				if err != nil {
 					return err
+				}
+
+				if !isGitHubAssetURL(resolved.Host, assetURL) {
+					return fmt.Errorf("%q is not a recognized GitHub-hosted asset URL for host %q; only assets pasted into a pull request are supported", assetURL, resolved.Host)
 				}
 
 				client, err := gh.NewGitHubClientWithRepo(resolved)
