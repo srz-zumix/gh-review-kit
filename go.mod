@@ -2,7 +2,7 @@ module github.com/srz-zumix/gh-review-kit
 
 go 1.26.1
 
-require github.com/srz-zumix/go-gh-extension v0.6.6
+require github.com/srz-zumix/go-gh-extension v0.6.8
 
 require (
 	charm.land/bubbles/v2 v2.1.1 // indirect
