@@ -114,6 +114,14 @@ func TestSetRejectsMalformedURLArg(t *testing.T) {
 	}
 }
 
+func TestSetLocalModeRejectsAssetURL(t *testing.T) {
+	withReadonly(t, false)
+	err := runSet(t, "https://github.com/user-attachments/assets/00000000-0000-0000-0000-000000000000")
+	if err == nil || !strings.Contains(err.Error(), "specify --pr or --issue") {
+		t.Fatalf("expected asset-URL-in-local-mode error, got %v", err)
+	}
+}
+
 // TestSetForwardsOptions verifies the --pr/--issue path maps flags and the
 // target selection onto UpdateAssetsOptions exactly.
 func TestSetForwardsOptions(t *testing.T) {

@@ -100,6 +100,14 @@ JPEG files have no external tool dependency.`,
 			}
 
 			if target == "" {
+				// The <asset-url> form only makes sense with --pr/--issue.
+				// Reject a URL here so it is not mistaken for a local file
+				// path and failing later with a confusing file error.
+				if _, isURL, err := classifyAsset(args[0]); err != nil {
+					return err
+				} else if isURL {
+					return fmt.Errorf("%q is a URL; specify --pr or --issue to re-embed a pull request or issue attachment", args[0])
+				}
 				if isReadonly() {
 					return fmt.Errorf("attestation set cannot run in read-only mode because it writes a local file")
 				}
