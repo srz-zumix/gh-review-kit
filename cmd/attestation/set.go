@@ -24,6 +24,11 @@ var embedGitMetadata = attestation.EmbedGitMetadata
 // fake implementation without calling the GitHub API.
 var updateAssets = attestation.UpdateAssets
 
+// newGitHubClientWithRepo constructs the GitHub client for the --pr/--issue
+// modes. It is a package variable so tests can substitute a fake without
+// requiring authentication.
+var newGitHubClientWithRepo = gh.NewGitHubClientWithRepo
+
 // isReadonly reports whether the global --read-only guardrail is active.
 // It is a package variable so tests can override it without mutating the
 // process-wide guardrail singleton.
@@ -128,7 +133,7 @@ JPEG files have no external tool dependency.`,
 				return fmt.Errorf("%q is not a recognized GitHub-hosted asset URL for host %q; only assets pasted into a pull request or issue are supported", assetURL, resolvedRepo.Host)
 			}
 
-			client, err := gh.NewGitHubClientWithRepo(resolvedRepo)
+			client, err := newGitHubClientWithRepo(resolvedRepo)
 			if err != nil {
 				return fmt.Errorf("failed to create GitHub client: %w", err)
 			}

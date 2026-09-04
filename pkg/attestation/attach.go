@@ -277,6 +277,15 @@ func reuploadAssets(ctx context.Context, g *gh.GitHubClient, downloadClient *htt
 			if errors.As(err, &rateLimited) {
 				return updates, replacements, fmt.Errorf("failed to upload asset %q: %w", update.Filename, err)
 			}
+			// Re-embedding can grow a file past the endpoint's size limit even
+			// though the original passed the pre-download check. Record it as a
+			// skip, matching the documented behavior that unsupported uploads
+			// are skipped rather than reported as errors.
+			if errors.Is(err, gh.ErrUserAttachmentUnsupported) {
+				update.Skipped = fmt.Sprintf("%q cannot be re-uploaded: %v", update.Filename, gh.ErrUserAttachmentUnsupported)
+				logger.Warn(fmt.Sprintf("skipped asset %q: %v", update.Filename, err))
+				continue
+			}
 			update.Error = err.Error()
 			logger.Warn(fmt.Sprintf("failed to upload asset %q: %v", update.Filename, err))
 			continue
@@ -354,6 +363,14 @@ func applyReplacements(ctx context.Context, g *gh.GitHubClient, opts UpdateAsset
 // URLs. The original assets are left in place, since GitHub offers no API to
 // delete them.
 func UpdateAssets(ctx context.Context, g *gh.GitHubClient, opts UpdateAssetsOptions) ([]*AssetUpdate, error) {
+	// Output names a single local destination, so it only makes sense when a
+	// single asset is targeted. Enforce it here rather than relying on callers,
+	// since reusing it across multiple scanned assets would overwrite the same
+	// file or fail mid-run.
+	if opts.Output != "" && opts.AssetURL == "" {
+		return nil, fmt.Errorf("output path is only valid together with a single asset URL")
+	}
+
 	ghRepo, err := gh.GetRepository(ctx, g, opts.Repo)
 	if err != nil {
 		return nil, fmt.Errorf("failed to look up repository %s/%s: %w", opts.Repo.Owner, opts.Repo.Name, err)

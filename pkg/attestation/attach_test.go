@@ -1,9 +1,22 @@
 package attestation
 
 import (
+	"context"
 	"strings"
 	"testing"
 )
+
+// TestUpdateAssetsRejectsOutputWithoutAssetURL verifies the exported API
+// enforces the Output-requires-AssetURL invariant before any GitHub call, so
+// the check triggers even with a nil client.
+func TestUpdateAssetsRejectsOutputWithoutAssetURL(t *testing.T) {
+	_, err := UpdateAssets(context.Background(), nil, UpdateAssetsOptions{
+		Output: "out.png",
+	})
+	if err == nil || !strings.Contains(err.Error(), "output path is only valid") {
+		t.Fatalf("expected output-requires-asset-url error, got %v", err)
+	}
+}
 
 func TestReplaceAssetURLs(t *testing.T) {
 	const base = "https://github.com/user-attachments/assets/aaaa"
