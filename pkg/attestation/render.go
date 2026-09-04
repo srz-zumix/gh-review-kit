@@ -78,19 +78,22 @@ func RenderAssetUpdates(r *render.Renderer, updates []*AssetUpdate) error {
 	return nil
 }
 
+// assetLocationLabel formats an asset location as "body",
+// "issue_comment#<id>", or "review_comment#<id>" for text display.
+func assetLocationLabel(location AssetLocation, locationID int64) string {
+	if locationID == 0 {
+		return string(location)
+	}
+	return fmt.Sprintf("%s#%d", location, locationID)
+}
+
 // locationLabel formats the asset's location as "body",
 // "issue_comment#<id>", or "review_comment#<id>" for text display.
 func (a *PRAsset) locationLabel() string {
-	if a.LocationID == 0 {
-		return string(a.Location)
-	}
-	return fmt.Sprintf("%s#%d", a.Location, a.LocationID)
+	return assetLocationLabel(a.Location, a.LocationID)
 }
 
 // locationLabel formats the update's location the same way PRAsset does.
 func (a *AssetUpdate) locationLabel() string {
-	if a.LocationID == 0 {
-		return string(a.Location)
-	}
-	return fmt.Sprintf("%s#%d", a.Location, a.LocationID)
+	return assetLocationLabel(a.Location, a.LocationID)
 }

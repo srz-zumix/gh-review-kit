@@ -47,7 +47,10 @@ gh review-kit rerequest 123 --read-only
 #### Embed Git provenance metadata into a video or image
 
 ```sh
-gh review-kit attestation set [<input-file> | <asset-url>] [-o OUTPUT] [--pr PR | --issue ISSUE] [-R REPO] [--max-asset-size N] [-C DIR | --repo-dir DIR] [--comment TEXT] [--force] [--format FORMAT]
+# Local file mode
+gh review-kit attestation set <input-file> -o OUTPUT [-C DIR | --repo-dir DIR] [--comment TEXT] [--force] [--format FORMAT]
+# Pull request / issue attachment mode
+gh review-kit attestation set (--pr PR | --issue ISSUE) [<asset-url> [-o OUTPUT]] [-R REPO] [--max-asset-size N] [-C DIR | --repo-dir DIR] [--comment TEXT] [--force] [--format FORMAT]
 ```
 
 Collect Git information (commit, branch, dirty state, commit date, and repository) from a local Git repository and embed it as metadata tags into a copy of the input file, together with an optional freeform comment (`--comment`). For video files, FFmpeg stream-copies all media without transcoding, preserving existing streams, metadata, and chapters on a best-effort basis, and the embedded tags are verified with `ffprobe` before the output file is written; a container that cannot retain custom metadata keys produces warnings rather than a failure. For PNG and JPEG files, tags are embedded natively (PNG `iTXt` chunks (UTF-8 text) or JPEG COM segments) without invoking FFmpeg.

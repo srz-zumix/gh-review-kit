@@ -51,7 +51,7 @@ func NewSetCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "set [<input-file> | <asset-url>]",
+		Use:   "set (<input-file> | (--pr | --issue) [<asset-url>])",
 		Short: "Embed Git provenance metadata into a video, PNG, or JPEG file",
 		Long: `Embed Git provenance metadata into a video, PNG, or JPEG file.
 

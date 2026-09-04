@@ -72,7 +72,10 @@ Two kinds of input are supported:
 - `--pr` or `--issue`: re-embed metadata into files already attached to a pull request or issue. Each attachment is downloaded, re-embedded, uploaded again through GitHub's user-attachments endpoint, and every link to it in the target's body and comments is rewritten to the new URL. Attachments that already carry provenance metadata are left untouched, so re-running the command does not replace working links. Passing an `<asset-url>` argument as well limits the run to that single attachment. `--output` is optional here and, when given, also keeps a local copy of the single re-embedded attachment. GitHub offers no API to delete the originals, so they remain reachable at their old URLs, and uploading is unavailable on GitHub Enterprise Server. Attachments whose type or size the upload endpoint does not accept are skipped rather than causing an error.
 
 ```bash
-gh review-kit attestation set [<input-file> | <asset-url>] [flags]
+# Local file mode
+gh review-kit attestation set <input-file> --output OUTPUT [flags]
+# Pull request / issue attachment mode
+gh review-kit attestation set (--pr PR | --issue ISSUE) [<asset-url> [--output OUTPUT]] [flags]
 ```
 
 ### Options
