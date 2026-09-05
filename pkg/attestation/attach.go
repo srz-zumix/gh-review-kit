@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -209,11 +210,12 @@ func reuploadAssets(ctx context.Context, g *gh.GitHubClient, downloadClient *htt
 			update.Skipped = fmt.Sprintf("asset size %d bytes exceeds the limit of %d bytes", meta.Size, opts.MaxAssetSize)
 			continue
 		}
-		contentType, ok := gh.UserAttachmentSupported(update.Filename, meta.Size)
+		uploadName, contentType, ok := resolveUploadName(update.Filename, meta)
 		if !ok {
 			update.Skipped = fmt.Sprintf("%q cannot be re-uploaded: %v", update.Filename, gh.ErrUserAttachmentUnsupported)
 			continue
 		}
+		update.Filename = uploadName
 
 		srcPath := filepath.Join(tmpDir, fmt.Sprintf("%d-src-%s", i, update.Filename))
 		if err := ioutil.DownloadFile(ctx, downloadClient, s.url, srcPath); err != nil {
@@ -296,6 +298,40 @@ func reuploadAssets(ctx context.Context, g *gh.GitHubClient, downloadClient *htt
 	}
 
 	return updates, replacements, nil
+}
+
+// resolveUploadName returns the name to upload the asset under and the content
+// type the endpoint expects for it. A GitHub attachment URL is an
+// extension-less id, so when the name carries no usable extension one is
+// appended from the response metadata; without it the endpoint rejects the
+// upload even for a supported type.
+func resolveUploadName(filename string, meta httputil.AssetMeta) (string, string, bool) {
+	if contentType, ok := gh.UserAttachmentSupported(filename, meta.Size); ok {
+		return filename, contentType, true
+	}
+	for _, ext := range metaExtensions(meta) {
+		candidate := filename + ext
+		if contentType, ok := gh.UserAttachmentSupported(candidate, meta.Size); ok {
+			return candidate, contentType, true
+		}
+	}
+	return filename, "", false
+}
+
+// metaExtensions lists the file extensions an asset's HTTP metadata suggests,
+// most specific first.
+func metaExtensions(meta httputil.AssetMeta) []string {
+	var exts []string
+	if meta.ExtHint != "" {
+		exts = append(exts, meta.ExtHint)
+	}
+	if mediaType, _, err := mime.ParseMediaType(meta.ContentType); err == nil {
+		byType, err := mime.ExtensionsByType(mediaType)
+		if err == nil {
+			exts = append(exts, byType...)
+		}
+	}
+	return exts
 }
 
 // removeTempFile deletes a working copy of an asset, warning instead of
