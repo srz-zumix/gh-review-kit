@@ -47,10 +47,18 @@ gh review-kit rerequest 123 --read-only
 #### Embed Git provenance metadata into a video or image
 
 ```sh
+# Local file mode
 gh review-kit attestation set <input-file> -o OUTPUT [-C DIR | --repo-dir DIR] [--comment TEXT] [--force] [--format FORMAT]
+# Pull request / issue attachment mode
+gh review-kit attestation set (--pr PR | --issue ISSUE) [<asset-url> [-o OUTPUT]] [-R REPO] [--max-asset-size N] [-C DIR | --repo-dir DIR] [--comment TEXT] [--force] [--format FORMAT]
 ```
 
 Collect Git information (commit, branch, dirty state, commit date, and repository) from a local Git repository and embed it as metadata tags into a copy of the input file, together with an optional freeform comment (`--comment`). For video files, FFmpeg stream-copies all media without transcoding, preserving existing streams, metadata, and chapters on a best-effort basis, and the embedded tags are verified with `ffprobe` before the output file is written; a container that cannot retain custom metadata keys produces warnings rather than a failure. For PNG and JPEG files, tags are embedded natively (PNG `iTXt` chunks (UTF-8 text) or JPEG COM segments) without invoking FFmpeg.
+
+Two kinds of input are supported:
+
+- `<input-file>`: embed metadata into a local file and write the result to `--output`, which is required in this mode.
+- `--pr` or `--issue`: re-embed metadata into files already attached to a pull request or issue. Each attachment is downloaded, re-embedded, uploaded again through GitHub's user-attachments endpoint, and every link to it in the target's body and comments is rewritten to the new URL. Attachments that already carry provenance metadata are left untouched, so re-running the command does not replace working links. Passing an `<asset-url>` argument as well limits the run to that single attachment. `--output` is optional in this mode and, when given, also keeps a local copy of the single re-embedded attachment. GitHub offers no API to delete the originals, so they remain reachable at their old URLs, and uploading is unavailable on GitHub Enterprise Server. Attachments whose type or size the upload endpoint does not accept are skipped rather than causing an error.
 
 This embeds unsigned provenance metadata only. It is not a cryptographic signature, GitHub artifact attestation, or tamper-proof claim.
 
@@ -72,8 +80,12 @@ Requires `ffmpeg` and `ffprobe` to be available on `PATH` for video files; PNG a
 
 - `--comment`: Freeform comment to embed alongside the Git provenance tags (optional, default: none)
 - `--force`: Overwrite the output file if it already exists (optional, default: false)
-- `--format`: Output format: `text`, `json` (optional, default: `text`)
-- `-o`, `--output`: Output file path (required)
+- `--format`: Output format: `text`, `json` (optional, default: `text`); in `--pr`/`--issue` mode each asset is a block starting with a `<filename> (<location>)` header, followed by `old_url=`/`new_url=` and its tags, or `skipped=<reason>` / `error=<message>`
+- `--issue`: Re-embed and re-upload the attachments of an issue, rewriting its links (number or URL; optional, mutually exclusive with `--pr`)
+- `--max-asset-size`: In `--pr`/`--issue` mode, skip attachments whose server-reported size exceeds this many bytes instead of downloading them (optional, default: `0` = no limit)
+- `-o`, `--output`: Output file path (required for `<input-file>`, optional for a single `<asset-url>`)
+- `--pr`: Re-embed and re-upload the attachments of a pull request, rewriting its links (number, URL, or branch name; optional, mutually exclusive with `--issue`)
+- `-R`, `--repo`: Repository for GitHub authentication and asset uploads, `[HOST/]OWNER/REPO` (optional, default: current repository, or derived from `--pr`/`--issue`)
 - `-C`, `--repo-dir`: Git repository directory to collect provenance from (optional, default: current directory)
 
 **Examples:**
@@ -93,6 +105,12 @@ gh review-kit attestation set input.png --output output.png
 
 # Embed provenance together with a freeform comment
 gh review-kit attestation set input.mp4 --output output.mp4 --comment "pre-release build"
+
+# Re-embed every attachment of a pull request and rewrite its links
+gh review-kit attestation set --pr 123
+
+# Re-embed a single attachment of an issue and keep a local copy
+gh review-kit attestation set https://github.com/user-attachments/assets/00000000-0000-0000-0000-000000000000 --issue 456 --output local.png
 ```
 
 #### Display Git provenance metadata embedded in a video or image

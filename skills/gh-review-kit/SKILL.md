@@ -26,7 +26,7 @@ gh review-kit --version
 gh auth login
 ```
 
-The `attestation set` command does not call the GitHub API or require GitHub authentication, but it does require a local Git repository plus `ffmpeg` and `ffprobe` on `PATH`. The `attestation view` command requires `ffprobe` on `PATH` for video files. Its `--pr` mode calls the GitHub API (to read the pull request and its comments) and downloads the referenced GitHub-hosted assets, so it requires GitHub authentication. Its `<asset-url>` mode does not call the GitHub API; it downloads a single GitHub-hosted asset over HTTP using an authentication-aware client, which may require GitHub authentication for private assets.
+The `attestation set` command requires a local Git repository plus `ffmpeg` and `ffprobe` on `PATH` for video files. Its `<input-file>` mode does not call the GitHub API or require GitHub authentication; its `--pr`/`--issue` mode reads the target and its comments, downloads the referenced assets, uploads the re-embedded copies, and edits the target's body and comments, so it requires GitHub authentication and write access. The `attestation view` command requires `ffprobe` on `PATH` for video files. Its `--pr` mode calls the GitHub API (to read the pull request and its comments) and downloads the referenced GitHub-hosted assets, so it requires GitHub authentication. Its `<asset-url>` mode does not call the GitHub API; it downloads a single GitHub-hosted asset over HTTP using an authentication-aware client, which may require GitHub authentication for private assets.
 
 ## CLI Structure
 
@@ -64,10 +64,18 @@ gh review-kit                       # Root command
 
 Collect Git information (commit, branch, dirty state, commit date, and repository) from a local Git repository and embed it as metadata tags into a copy of a video or image file, together with an optional freeform comment (`--comment`). For video files, FFmpeg stream-copies all media without transcoding, preserving existing streams, metadata, and chapters on a best-effort basis, and embedded tags are verified with `ffprobe`; a container that cannot retain custom metadata keys produces warnings rather than a failure. For PNG and JPEG files, tags are embedded natively (PNG `iTXt` chunks (UTF-8 text) or JPEG COM segments) without invoking FFmpeg.
 
-This embeds unsigned provenance metadata only — it is not a cryptographic signature, GitHub artifact attestation, or tamper-proof claim. It does not call the GitHub API.
+This embeds unsigned provenance metadata only — it is not a cryptographic signature, GitHub artifact attestation, or tamper-proof claim.
+
+Two kinds of input are supported:
+
+- `<input-file>`: embed metadata into a local file and write the result to `--output`, which is required in this mode. It does not call the GitHub API.
+- `--pr` or `--issue`: re-embed metadata into files already attached to a pull request or issue. Each attachment is downloaded, re-embedded, uploaded again through GitHub's user-attachments endpoint, and every link to it in the target's body and comments is rewritten to the new URL. Attachments that already carry provenance metadata are left untouched, so re-running the command does not replace working links. Passing an `<asset-url>` argument as well limits the run to that single attachment. `--output` is optional here and, when given, also keeps a local copy of the single re-embedded attachment. GitHub offers no API to delete the originals, so they remain reachable at their old URLs, and uploading is unavailable on GitHub Enterprise Server. Attachments whose type or size the upload endpoint does not accept are skipped rather than causing an error.
 
 ```bash
-gh review-kit attestation set <input-file> -o OUTPUT [flags]
+# Local file mode
+gh review-kit attestation set <input-file> --output OUTPUT [flags]
+# Pull request / issue attachment mode
+gh review-kit attestation set (--pr PR | --issue ISSUE) [<asset-url> [--output OUTPUT]] [flags]
 ```
 
 ### Options
@@ -76,8 +84,12 @@ gh review-kit attestation set <input-file> -o OUTPUT [flags]
 | --- | --- |
 | `--comment` | Freeform comment to embed alongside the Git provenance tags (default: none) |
 | `--force` | Overwrite the output file if it already exists (default: false) |
-| `--format` | Output format: `text`, `json` (default: `text`) |
-| `-o`, `--output` | Output file path (required) |
+| `--format` | Output format: `text`, `json` (default: `text`); in `--pr`/`--issue` mode each asset is a block starting with a `<filename> (<location>)` header, followed by `old_url=`/`new_url=` and its tags, or `skipped=<reason>` / `error=<message>` |
+| `--issue` | Re-embed and re-upload the attachments of an issue, rewriting its links (number or URL; mutually exclusive with `--pr`) |
+| `--max-asset-size` | In `--pr`/`--issue` mode, skip attachments whose server-reported size exceeds this many bytes instead of downloading them (default: `0` = no limit) |
+| `-o`, `--output` | Output file path (required for `<input-file>`, optional for a single `<asset-url>`) |
+| `--pr` | Re-embed and re-upload the attachments of a pull request, rewriting its links (number, URL, or branch name; mutually exclusive with `--issue`) |
+| `-R`, `--repo` | Repository for GitHub authentication and asset uploads, `[HOST/]OWNER/REPO` (default: current repository, or derived from `--pr`/`--issue`) |
 | `-C`, `--repo-dir` | Git repository directory to collect provenance from (default: current directory) |
 
 ### Embedded Tags
@@ -109,6 +121,12 @@ gh review-kit attestation set input.png --output output.png
 
 # Embed provenance together with a freeform comment
 gh review-kit attestation set input.mp4 --output output.mp4 --comment "pre-release build"
+
+# Re-embed every attachment of a pull request and rewrite its links
+gh review-kit attestation set --pr 123
+
+# Re-embed a single attachment of an issue and keep a local copy
+gh review-kit attestation set https://github.com/user-attachments/assets/00000000-0000-0000-0000-000000000000 --issue 456 --output local.png
 ```
 
 ## Display Git Provenance Metadata Embedded in a Video or Image (attestation view)
