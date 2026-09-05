@@ -43,6 +43,9 @@ type PRAsset struct {
 	// LocationID is the comment ID the asset was found in, or 0 for the
 	// pull request body.
 	LocationID int64 `json:"location_id,omitempty"`
+	// LocationURL is the HTML URL of the comment the asset was found in, or
+	// of the pull request itself for the body.
+	LocationURL string `json:"location_url,omitempty"`
 	// AssetURL is the GitHub-hosted URL of the asset.
 	AssetURL string `json:"asset_url"`
 	// Filename is the asset's original upload name, when known.
@@ -73,18 +76,20 @@ type PRAssetOptions struct {
 // scannedAsset is an asset URL found while scanning pull request text,
 // before any HTTP metadata or attestation has been read.
 type scannedAsset struct {
-	url        string
-	filename   string
-	location   AssetLocation
-	locationID int64
+	url         string
+	filename    string
+	location    AssetLocation
+	locationID  int64
+	locationURL string
 }
 
 // scannedText is a single piece of pull request text to scan for asset
 // URLs, together with where it came from.
 type scannedText struct {
-	text       string
-	location   AssetLocation
-	locationID int64
+	text        string
+	location    AssetLocation
+	locationID  int64
+	locationURL string
 }
 
 // scanAssetURLs scans each entry in texts for GitHub-hosted asset URLs
@@ -108,10 +113,11 @@ func scanAssetURLs(patterns []*regexp.Regexp, texts []scannedText) []scannedAsse
 				}
 				seen[u] = true
 				scanned = append(scanned, scannedAsset{
-					url:        u,
-					filename:   hints[u],
-					location:   entry.location,
-					locationID: entry.locationID,
+					url:         u,
+					filename:    hints[u],
+					location:    entry.location,
+					locationID:  entry.locationID,
+					locationURL: entry.locationURL,
 				})
 			}
 		}
@@ -142,12 +148,13 @@ func fetchPRAssets(ctx context.Context, httpClient *http.Client, host string, pr
 	assets := make([]*PRAsset, 0, len(scanned))
 	for i, s := range scanned {
 		asset := &PRAsset{
-			PRNumber:   prNumber,
-			PRURL:      prURL,
-			Location:   s.location,
-			LocationID: s.locationID,
-			AssetURL:   s.url,
-			FileSize:   -1,
+			PRNumber:    prNumber,
+			PRURL:       prURL,
+			Location:    s.location,
+			LocationID:  s.locationID,
+			LocationURL: s.locationURL,
+			AssetURL:    s.url,
+			FileSize:    -1,
 		}
 
 		meta := httputil.FetchAssetMeta(ctx, httpClient, s.url, host)
@@ -211,14 +218,14 @@ func ReadPRAssets(ctx context.Context, g *gh.GitHubClient, opts PRAssetOptions) 
 		return nil, fmt.Errorf("failed to find pull request %q: %w", opts.PR, err)
 	}
 
-	texts := []scannedText{{text: pr.GetBody(), location: LocationBody}}
+	texts := []scannedText{{text: pr.GetBody(), location: LocationBody, locationURL: pr.GetHTMLURL()}}
 
 	issueComments, err := gh.ListIssueComments(ctx, g, opts.Repo, pr.GetNumber())
 	if err != nil {
 		return nil, fmt.Errorf("failed to list issue comments for pull request #%d: %w", pr.GetNumber(), err)
 	}
 	for _, comment := range issueComments {
-		texts = append(texts, scannedText{text: comment.GetBody(), location: LocationIssueComment, locationID: comment.GetID()})
+		texts = append(texts, scannedText{text: comment.GetBody(), location: LocationIssueComment, locationID: comment.GetID(), locationURL: comment.GetHTMLURL()})
 	}
 
 	reviewComments, err := gh.ListPullRequestReviewComments(ctx, g, opts.Repo, pr.GetNumber())
@@ -226,7 +233,7 @@ func ReadPRAssets(ctx context.Context, g *gh.GitHubClient, opts PRAssetOptions) 
 		return nil, fmt.Errorf("failed to list review comments for pull request #%d: %w", pr.GetNumber(), err)
 	}
 	for _, comment := range reviewComments {
-		texts = append(texts, scannedText{text: comment.GetBody(), location: LocationReviewComment, locationID: comment.GetID()})
+		texts = append(texts, scannedText{text: comment.GetBody(), location: LocationReviewComment, locationID: comment.GetID(), locationURL: comment.GetHTMLURL()})
 	}
 
 	patterns := gh.BuildAssetURLPatterns(opts.Repo.Host)
