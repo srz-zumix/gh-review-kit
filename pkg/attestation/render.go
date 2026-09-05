@@ -32,6 +32,9 @@ func RenderPRAssets(r *render.Renderer, assets []*PRAsset) error {
 			r.WriteLine("")
 		}
 		r.WriteLine(fmt.Sprintf("%s (%s)", asset.Filename, asset.locationLabel()))
+		if asset.LocationURL != "" {
+			r.WriteLine(fmt.Sprintf("location_url=%s", asset.LocationURL))
+		}
 		switch {
 		case asset.Error != "":
 			r.WriteLine(fmt.Sprintf("error=%s", asset.Error))

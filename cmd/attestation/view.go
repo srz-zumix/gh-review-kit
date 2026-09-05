@@ -175,8 +175,10 @@ It supports three modes, mutually exclusive with each other:
 
 Output defaults to "key=value" lines, one per tag. In --pr text output, each
 asset is rendered as a block beginning with a "<filename> (<location>)"
-header, followed by its "key=value" tags, "no attestation found", or
-"error=<message>", with blocks separated by blank lines. The json format
+header, followed by a "location_url=<url>" line linking to the comment (or
+the pull request itself for the body), and then its "key=value" tags, "no
+attestation found", or "error=<message>", with blocks separated by blank
+lines. The json format
 (--format json, optionally with --jq/--template) produces structured data
 instead.
 

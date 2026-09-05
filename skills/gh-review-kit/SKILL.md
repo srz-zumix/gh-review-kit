@@ -141,7 +141,7 @@ gh review-kit attestation view [<input-file> | <asset-url>] [flags]
 
 | Flag | Description |
 | --- | --- |
-| `--format` | Output format: `text`, `json` (default: `text`); `text` renders `key=value` lines. In `--pr` mode each asset is a block starting with a `<filename> (<location>)` header, followed by its tags, `no attestation found`, or `error=<message>` |
+| `--format` | Output format: `text`, `json` (default: `text`); `text` renders `key=value` lines. In `--pr` mode each asset is a block starting with a `<filename> (<location>)` header, followed by `location_url=<url>` linking to the comment (or the pull request itself for the body), and then its tags, `no attestation found`, or `error=<message>` |
 | `--max-asset-size` | In `--pr` mode, skip assets whose server-reported size exceeds this many bytes instead of downloading them (default: `0` = no limit) |
 | `--pr` | Scan a pull request's attachments for Git provenance metadata (number, URL, or branch name; mutually exclusive with `<input-file>`/`<asset-url>`) |
 | `-R`, `--repo` | Repository for GitHub authentication (`--pr` API access and asset downloads), `[HOST/]OWNER/REPO` (default: current repository, or derived from `--pr`/the asset URL) |

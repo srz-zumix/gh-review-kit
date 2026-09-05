@@ -12,8 +12,9 @@ func TestRenderPRAssets_Text(t *testing.T) {
 	sr := render.NewStringRenderer(nil)
 	assets := []*PRAsset{
 		{
-			Filename: "attested.png",
-			Location: LocationBody,
+			Filename:    "attested.png",
+			Location:    LocationBody,
+			LocationURL: "https://github.com/owner/repo/pull/1",
 			Tags: []Tag{
 				{Key: GitTagCommit, Value: "abcdef1234567890"},
 				{Key: GitTagBranch, Value: "main"},
@@ -21,10 +22,11 @@ func TestRenderPRAssets_Text(t *testing.T) {
 			Attested: true,
 		},
 		{
-			Filename:   "plain.png",
-			Location:   LocationIssueComment,
-			LocationID: 42,
-			Attested:   false,
+			Filename:    "plain.png",
+			Location:    LocationIssueComment,
+			LocationID:  42,
+			LocationURL: "https://github.com/owner/repo/pull/1#issuecomment-42",
+			Attested:    false,
 		},
 		{
 			Filename:   "broken.png",
@@ -40,8 +42,8 @@ func TestRenderPRAssets_Text(t *testing.T) {
 
 	got := sr.Stdout.String()
 	for _, want := range []string{
-		"attested.png (body)", "git.commit=abcdef1234567890", "git.branch=main",
-		"plain.png (issue_comment#42)", "no attestation found",
+		"attested.png (body)", "location_url=https://github.com/owner/repo/pull/1", "git.commit=abcdef1234567890", "git.branch=main",
+		"plain.png (issue_comment#42)", "location_url=https://github.com/owner/repo/pull/1#issuecomment-42", "no attestation found",
 		"broken.png (review_comment#7)", "error=download failed",
 	} {
 		if !strings.Contains(got, want) {
