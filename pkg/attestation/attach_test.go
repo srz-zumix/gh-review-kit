@@ -4,6 +4,8 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/srz-zumix/go-gh-extension/pkg/httputil"
 )
 
 // TestUpdateAssetsRejectsOutputWithoutAssetURL verifies the exported API
@@ -15,6 +17,71 @@ func TestUpdateAssetsRejectsOutputWithoutAssetURL(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "output path is only valid") {
 		t.Fatalf("expected output-requires-asset-url error, got %v", err)
+	}
+}
+
+func TestResolveUploadName(t *testing.T) {
+	tests := []struct {
+		name            string
+		filename        string
+		meta            httputil.AssetMeta
+		wantName        string
+		wantContentType string
+		wantOK          bool
+	}{
+		{
+			name:            "extension already usable",
+			filename:        "shot.png",
+			meta:            httputil.AssetMeta{Size: 1024, ContentType: "image/png"},
+			wantName:        "shot.png",
+			wantContentType: "image/png",
+			wantOK:          true,
+		},
+		{
+			name:            "extension from redirect hint",
+			filename:        "3a7a2a1c_avater-a",
+			meta:            httputil.AssetMeta{Size: 1024, ExtHint: ".png"},
+			wantName:        "3a7a2a1c_avater-a.png",
+			wantContentType: "image/png",
+			wantOK:          true,
+		},
+		{
+			name:            "extension from content type",
+			filename:        "3a7a2a1c_avater-a",
+			meta:            httputil.AssetMeta{Size: 1024, ContentType: "image/png; charset=binary"},
+			wantName:        "3a7a2a1c_avater-a.png",
+			wantContentType: "image/png",
+			wantOK:          true,
+		},
+		{
+			name:     "unsupported type",
+			filename: "notes",
+			meta:     httputil.AssetMeta{Size: 1024, ContentType: "application/zip"},
+			wantName: "notes",
+			wantOK:   false,
+		},
+		{
+			name:     "size over the limit",
+			filename: "shot.png",
+			meta:     httputil.AssetMeta{Size: 1 << 30, ContentType: "image/png"},
+			wantName: "shot.png",
+			wantOK:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotName, gotContentType, ok := resolveUploadName(tt.filename, tt.meta)
+			if ok != tt.wantOK {
+				t.Fatalf("resolveUploadName() ok = %v, want %v", ok, tt.wantOK)
+			}
+			if gotName != tt.wantName {
+				t.Errorf("resolveUploadName() name = %q, want %q", gotName, tt.wantName)
+			}
+			if gotContentType != tt.wantContentType {
+				t.Errorf("resolveUploadName() contentType = %q, want %q", gotContentType, tt.wantContentType)
+			}
+		})
 	}
 }
 
