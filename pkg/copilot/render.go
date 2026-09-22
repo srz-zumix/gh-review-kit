@@ -81,5 +81,6 @@ func RenderReviewStatus(r *render.Renderer, status *ReviewStatus) error {
 	r.WriteLine(fmt.Sprintf("last_reviewed_at=%s", lastReviewedAt))
 	r.WriteLine(fmt.Sprintf("comments=%d", status.Comments))
 	r.WriteLine(fmt.Sprintf("unresolved_comments=%d", status.UnresolvedComments))
+	r.WriteLine(fmt.Sprintf("head_reviewed=%t", status.HeadReviewed))
 	return nil
 }

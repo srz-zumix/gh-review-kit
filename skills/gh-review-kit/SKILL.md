@@ -46,10 +46,10 @@ gh review-kit                       # Root command
 │   ├── suggest-rules               # Rank candidate coding rules / review viewpoints
 │   └── report                      # Generate a Markdown/JSON report from a dataset
 ├── copilot                         # Judge and act on Copilot code review comments
-│   ├── assign                      # Assign GitHub Copilot as a reviewer on a pull request
 │   ├── comments                    # List, and optionally evaluate, Copilot review comments
 │   ├── feedback                    # Leave a reaction on pull request review comments
 │   ├── resolve                     # Resolve pull request review threads by comment ID
+│   ├── review-request              # Request a Copilot code review when the latest commit is unreviewed
 │   └── status                      # Show the Copilot code review status of a pull request
 ├── rerequest                       # Re-request review for a pull request
 ├── reviewed                        # Mark files in a pull request as viewed
@@ -610,36 +610,6 @@ gh review-kit comments report --dataset ./dataset \
   --review-states CHANGES_REQUESTED --since 2025-10-01T00:00:00Z
 ```
 
-## Assign Copilot as a Reviewer (copilot assign)
-
-Request a code review from GitHub Copilot on a pull request, the same as requesting a review from a human reviewer. By default, it is an error to assign Copilot when it is already a requested reviewer on the pull request; use `--force` to request a review again anyway.
-
-Copilot's [review effort level](https://docs.github.com/en/copilot/concepts/agents/code-review#review-effort-level) (Lite or Balanced) cannot be selected through this command: neither the REST `requested_reviewers` endpoint nor the GraphQL `requestReviews` mutation exposes a parameter for it, so the pull request's or organization's configured default effort level is always used. Change the default in the repository or organization settings, or select it manually in the pull request's Reviewers section on GitHub.com, if a specific effort level is needed.
-
-```bash
-gh review-kit copilot assign [pull-request-number] [flags]
-```
-
-### Options
-
-| Flag | Description |
-| --- | --- |
-| `--force` | Assign Copilot even if it is already a requested reviewer (default: false) |
-| `--repo, -R` | Repository in the format 'owner/repo' (default: current repository) |
-
-### Examples
-
-```bash
-# Assign Copilot as a reviewer for the current branch's pull request
-gh review-kit copilot assign
-
-# Assign Copilot as a reviewer for a specific pull request
-gh review-kit copilot assign 123 --repo owner/repo
-
-# Request a review again even though Copilot is already a requested reviewer
-gh review-kit copilot assign --force
-```
-
 ## List Copilot Review Comments (copilot comments)
 
 List GitHub Copilot code review comments on a pull request. By default, resolved and outdated review threads are excluded.
@@ -793,11 +763,54 @@ gh review-kit copilot resolve 123456789 --pr 123 --unresolve
 gh review-kit copilot resolve https://github.com/owner/repo/pull/123#discussion_r456789
 ```
 
+## Request a Copilot Review (copilot review-request)
+
+Request a code review from GitHub Copilot on a pull request, the same as requesting a review from a human reviewer. The request is only sent when the latest commit has not been reviewed yet:
+
+| State | Action |
+| --- | --- |
+| Copilot has never been requested | request a review |
+| Copilot reviewed an earlier commit only | request a review again |
+| Copilot is a requested reviewer already | nothing to do |
+| Copilot has reviewed the latest commit | nothing to do |
+
+Use `--force` to request a review regardless of that state.
+
+Copilot's [review effort level](https://docs.github.com/en/copilot/concepts/agents/code-review#review-effort-level) (Lite or Balanced) cannot be selected through this command: neither the REST `requested_reviewers` endpoint nor the GraphQL `requestReviews` mutation exposes a parameter for it, so the pull request's or organization's configured default effort level is always used. Change the default in the repository or organization settings, or select it manually in the pull request's Reviewers section on GitHub.com, if a specific effort level is needed.
+
+```bash
+gh review-kit copilot review-request [pull-request-number] [flags]
+```
+
+**Aliases:** `rr`
+
+### Options
+
+| Flag | Description |
+| --- | --- |
+| `--force` | Request a review even when the latest commit has already been reviewed (default: false) |
+| `--repo, -R` | Repository in the format 'owner/repo' (default: current repository) |
+
+### Examples
+
+```bash
+# Request a Copilot review on the current branch's pull request
+gh review-kit copilot review-request
+
+# Request a Copilot review on a specific pull request
+gh review-kit copilot rr 123 --repo owner/repo
+
+# Request a review even though the latest commit has already been reviewed
+gh review-kit copilot review-request --force
+```
+
 ## Show Copilot Review Status (copilot status)
 
 Show where GitHub Copilot's code review of a pull request stands, together with the number of Copilot review comments and how many of them are still unresolved. If `pull-request-number` is omitted, the pull request for the current branch is used.
 
 The reported status is one of `not_requested`, `in_progress`, `commented`, `approved`, `changes_requested`, or `dismissed`. A pending review request takes precedence, so a pull request that Copilot has already reviewed and is reviewing again is reported as `in_progress`.
+
+`head_reviewed` tells whether Copilot reviewed the latest commit of the pull request. A `false` means every review it submitted predates the newest push, so the current code has not been reviewed yet.
 
 ```bash
 gh review-kit copilot status [pull-request-number] [flags]
@@ -821,6 +834,9 @@ gh review-kit copilot status 123 --repo owner/repo
 
 # Check whether Copilot is still reviewing
 gh review-kit copilot status 123 --format json --jq .status
+
+# Check whether the latest commit has been reviewed
+gh review-kit copilot status 123 --format json --jq .head_reviewed
 ```
 
 ## Re-request Review (rerequest)

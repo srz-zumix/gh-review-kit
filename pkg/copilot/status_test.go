@@ -30,6 +30,31 @@ func TestDeriveStatus(t *testing.T) {
 	}
 }
 
+func TestDecideReviewRequest(t *testing.T) {
+	tests := []struct {
+		name   string
+		status ReviewStatus
+		want   bool
+	}{
+		{"never requested", ReviewStatus{}, true},
+		{"reviewed an earlier commit only", ReviewStatus{ReviewCount: 1}, true},
+		{"requested and waiting for an answer", ReviewStatus{Requested: true}, false},
+		{"re-requested after a review", ReviewStatus{Requested: true, ReviewCount: 1}, false},
+		{"latest commit already reviewed", ReviewStatus{ReviewCount: 1, HeadReviewed: true}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, reason := DecideReviewRequest(&tt.status)
+			if got != tt.want {
+				t.Errorf("DecideReviewRequest() = %v, want %v", got, tt.want)
+			}
+			if reason == "" {
+				t.Error("DecideReviewRequest() returned an empty reason")
+			}
+		})
+	}
+}
+
 func TestIsCopilotLogin(t *testing.T) {
 	tests := []struct {
 		login string

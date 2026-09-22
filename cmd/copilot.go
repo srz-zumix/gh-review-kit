@@ -15,10 +15,10 @@ them with the Copilot CLI, and act on the verdict: leave negative feedback and
 resolve the thread for comments judged incorrect.`,
 	}
 
-	cmd.AddCommand(copilot.NewAssignCmd())
 	cmd.AddCommand(copilot.NewCommentsCmd())
 	cmd.AddCommand(copilot.NewFeedbackCmd())
 	cmd.AddCommand(copilot.NewResolveCmd())
+	cmd.AddCommand(copilot.NewReviewRequestCmd())
 	cmd.AddCommand(copilot.NewStatusCmd())
 
 	return cmd

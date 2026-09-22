@@ -37,11 +37,14 @@ type ReviewStatus struct {
 	LastReviewedAt     *time.Time `json:"last_reviewed_at,omitempty"`
 	Comments           int        `json:"comments"`
 	UnresolvedComments int        `json:"unresolved_comments"`
+	// HeadReviewed reports whether Copilot reviewed the latest commit, so a
+	// false means every review it submitted predates the newest push.
+	HeadReviewed bool `json:"head_reviewed"`
 }
 
 // GetReviewStatus reports whether GitHub Copilot is requested as a reviewer on
-// a pull request, the state of its most recent review, and how many of its
-// review comments are still unresolved.
+// a pull request, the state of its most recent review, how many of its review
+// comments are still unresolved, and whether it reviewed the latest commit.
 func GetReviewStatus(ctx context.Context, g *gh.GitHubClient, repo repository.Repository, pull_request any) (*ReviewStatus, error) {
 	number, err := gh.GetPullRequestNumber(pull_request)
 	if err != nil {
@@ -60,6 +63,12 @@ func GetReviewStatus(ctx context.Context, g *gh.GitHubClient, repo repository.Re
 		}
 	}
 
+	pull, err := gh.GetPullRequest(ctx, g, repo, pull_request)
+	if err != nil {
+		return nil, err
+	}
+	headSHA := pull.GetHead().GetSHA()
+
 	reviews, err := gh.GetPullRequestReviews(ctx, g, repo, pull_request)
 	if err != nil {
 		return nil, err
@@ -73,6 +82,10 @@ func GetReviewStatus(ctx context.Context, g *gh.GitHubClient, repo repository.Re
 		if status.LastReviewedAt == nil || submittedAt.After(*status.LastReviewedAt) {
 			status.LastReviewState = r.GetState()
 			status.LastReviewedAt = &submittedAt
+		}
+		// A review carries the commit it was submitted against.
+		if headSHA != "" && r.GetCommitID() == headSHA {
+			status.HeadReviewed = true
 		}
 	}
 
@@ -89,6 +102,25 @@ func GetReviewStatus(ctx context.Context, g *gh.GitHubClient, repo repository.Re
 
 	status.Status = deriveStatus(status.Requested, status.LastReviewState)
 	return status, nil
+}
+
+// DecideReviewRequest reports whether Copilot should be asked to review the
+// latest commit, together with the reason behind the answer. Copilot is asked
+// when it has never been requested, or when it reviewed an earlier commit and
+// the latest one has not been reviewed since.
+func DecideReviewRequest(status *ReviewStatus) (bool, string) {
+	switch {
+	case status.HeadReviewed:
+		return false, "Copilot has already reviewed the latest commit"
+	case status.Requested:
+		// Copilot stops being a requested reviewer once it answers, so a
+		// pending request always covers the latest commit.
+		return false, "Copilot is a requested reviewer and has not answered yet"
+	case status.ReviewCount == 0:
+		return true, "Copilot has not been requested to review yet"
+	default:
+		return true, "Copilot reviewed an earlier commit and has not reviewed the latest one"
+	}
 }
 
 // deriveStatus maps a pending review request and the most recent review state

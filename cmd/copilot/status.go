@@ -36,6 +36,10 @@ The reported status is one of:
 A pending review request takes precedence, so a pull request that Copilot has
 already reviewed and is reviewing again is reported as in_progress.
 
+head_reviewed tells whether Copilot reviewed the latest commit of the pull
+request. A false means every review it submitted predates the newest push, so
+the current code has not been reviewed yet.
+
 If pull-request-number is omitted, the pull request for the current branch is used.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {

@@ -613,34 +613,6 @@ gh review-kit comments report --dataset ./dataset \
 
 ### copilot
 
-#### Assign GitHub Copilot as a reviewer on a pull request
-
-```sh
-gh review-kit copilot assign [pull-request-number] [--repo REPO] [--force]
-```
-
-Request a code review from GitHub Copilot on a pull request, the same as requesting a review from a human reviewer. By default, it is an error to assign Copilot when it is already a requested reviewer on the pull request; use `--force` to request a review again anyway.
-
-Copilot's [review effort level](https://docs.github.com/en/copilot/concepts/agents/code-review#review-effort-level) (Lite or Balanced) cannot be selected through this command: neither the REST `requested_reviewers` endpoint nor the GraphQL `requestReviews` mutation exposes a parameter for it, so the pull request's or organization's configured default effort level is always used. Change the default in the repository or organization settings, or select it manually in the pull request's Reviewers section on GitHub.com, if a specific effort level is needed.
-
-**Options:**
-
-- `--force`: Assign Copilot even if it is already a requested reviewer (optional, default: false)
-- `--repo, -R`: Repository in the format 'owner/repo' (optional, defaults to current repository)
-
-**Examples:**
-
-```sh
-# Assign Copilot as a reviewer for the current branch's pull request
-gh review-kit copilot assign
-
-# Assign Copilot as a reviewer for a specific pull request
-gh review-kit copilot assign 123 --repo owner/repo
-
-# Request a review again even though Copilot is already a requested reviewer
-gh review-kit copilot assign --force
-```
-
 #### List Copilot code review comments on a pull request
 
 ```sh
@@ -788,6 +760,45 @@ gh review-kit copilot resolve 123456789 --pr 123 --unresolve
 gh review-kit copilot resolve https://github.com/owner/repo/pull/123#discussion_r456789
 ```
 
+#### Request a GitHub Copilot code review on a pull request
+
+```sh
+gh review-kit copilot review-request [pull-request-number] [--repo REPO] [--force]
+```
+
+Request a code review from GitHub Copilot on a pull request, the same as requesting a review from a human reviewer. The request is only sent when the latest commit has not been reviewed yet:
+
+| State | Action |
+| --- | --- |
+| Copilot has never been requested | request a review |
+| Copilot reviewed an earlier commit only | request a review again |
+| Copilot is a requested reviewer already | nothing to do |
+| Copilot has reviewed the latest commit | nothing to do |
+
+Use `--force` to request a review regardless of that state.
+
+Copilot's [review effort level](https://docs.github.com/en/copilot/concepts/agents/code-review#review-effort-level) (Lite or Balanced) cannot be selected through this command: neither the REST `requested_reviewers` endpoint nor the GraphQL `requestReviews` mutation exposes a parameter for it, so the pull request's or organization's configured default effort level is always used. Change the default in the repository or organization settings, or select it manually in the pull request's Reviewers section on GitHub.com, if a specific effort level is needed.
+
+**Aliases:** `rr`
+
+**Options:**
+
+- `--force`: Request a review even when the latest commit has already been reviewed (optional, default: false)
+- `--repo, -R`: Repository in the format 'owner/repo' (optional, defaults to current repository)
+
+**Examples:**
+
+```sh
+# Request a Copilot review on the current branch's pull request
+gh review-kit copilot review-request
+
+# Request a Copilot review on a specific pull request
+gh review-kit copilot rr 123 --repo owner/repo
+
+# Request a review even though the latest commit has already been reviewed
+gh review-kit copilot review-request --force
+```
+
 #### Show the GitHub Copilot code review status of a pull request
 
 ```sh
@@ -809,6 +820,8 @@ The reported status is one of:
 
 A pending review request takes precedence, so a pull request that Copilot has already reviewed and is reviewing again is reported as `in_progress`.
 
+`head_reviewed` tells whether Copilot reviewed the latest commit of the pull request. A `false` means every review it submitted predates the newest push, so the current code has not been reviewed yet.
+
 **Options:**
 
 - `--format`: Output format: `text`, `json` (optional, default: `text`)
@@ -825,6 +838,9 @@ gh review-kit copilot status 123 --repo owner/repo
 
 # Check whether Copilot is still reviewing
 gh review-kit copilot status 123 --format json --jq .status
+
+# Check whether the latest commit has been reviewed
+gh review-kit copilot status 123 --format json --jq .head_reviewed
 ```
 
 ### Re-request review for a pull request
