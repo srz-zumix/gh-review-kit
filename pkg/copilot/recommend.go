@@ -45,7 +45,7 @@ var pathBypassOptions = []string{"--allow-all-paths", "--allow-all", "--yolo"}
 
 // commandNamePattern matches a plausible command name, so that a quoted string
 // or an option leading a mis-split segment is not turned into a permission.
-var commandNamePattern = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
+var commandNamePattern = regexp.MustCompile(`^[A-Za-z0-9_.][A-Za-z0-9_.-]*$`)
 
 // recommendPermissions returns the Copilot CLI options that would have allowed
 // the denied calls, most specific first. Options already in effect are

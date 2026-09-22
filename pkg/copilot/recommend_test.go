@@ -52,6 +52,11 @@ func TestRecommendToolOptions(t *testing.T) {
 			want:  []string{"--allow-all-tools"},
 		},
 		{
+			name:  "option leading a mis-split segment is not a command",
+			calls: []deniedCall{denied("shell", "--allow-all baz")},
+			want:  []string{"--allow-all-tools"},
+		},
+		{
 			name:  "allow all tools already in effect",
 			opts:  EvaluateOptions{AllowAllTools: true},
 			calls: []deniedCall{denied("shell", "ls somewhere")},
