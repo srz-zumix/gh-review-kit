@@ -2,7 +2,7 @@ module github.com/srz-zumix/gh-review-kit
 
 go 1.26.1
 
-require github.com/srz-zumix/go-gh-extension v0.6.8
+require github.com/srz-zumix/go-gh-extension v0.6.16
 
 require (
 	charm.land/bubbles/v2 v2.1.1 // indirect
@@ -44,7 +44,6 @@ require (
 	github.com/google/go-github/v88 v88.0.0 // indirect
 	github.com/google/go-querystring v1.2.0 // indirect
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/henvic/httpretty v0.1.4 // indirect
 	github.com/huandu/xstrings v1.5.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
@@ -76,12 +75,12 @@ require (
 	github.com/stretchr/testify v1.12.0 // indirect
 	github.com/thlib/go-timezone-local v0.0.6 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
-	golang.org/x/crypto v0.55.0 // indirect
-	golang.org/x/mod v0.38.0 // indirect
-	golang.org/x/sync v0.22.0 // indirect
-	golang.org/x/sys v0.47.0 // indirect
-	golang.org/x/term v0.45.0 // indirect
-	golang.org/x/text v0.41.0 // indirect
+	golang.org/x/crypto v0.57.0 // indirect
+	golang.org/x/mod v0.41.0 // indirect
+	golang.org/x/sync v0.23.0 // indirect
+	golang.org/x/sys v0.48.0 // indirect
+	golang.org/x/term v0.46.0 // indirect
+	golang.org/x/text v0.42.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
@@ -89,5 +88,6 @@ require (
 	github.com/cli/cli/v2 v2.97.0
 	github.com/cli/go-gh/v2 v2.13.0
 	github.com/google/go-github/v90 v90.0.0
+	github.com/google/uuid v1.6.0
 	github.com/spf13/cobra v1.10.2
 )
