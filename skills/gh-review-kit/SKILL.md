@@ -643,7 +643,7 @@ gh review-kit copilot comments [flags] [-- copilot-cli-arg...]
 | `--copilot-bin` | Copilot CLI executable name or path (default: `copilot`) |
 | `--dryrun, -n` | Report the action that would be taken without performing it (default: false) |
 | `--evaluate` | Judge each comment with the Copilot CLI and act on the verdict (default: false) |
-| `--evaluate-timeout` | Timeout for a single Copilot CLI evaluation (default: `5m`) |
+| `--evaluate-timeout` | Timeout for a single Copilot CLI evaluation (default: `15m`) |
 | `--include-outdated` | Include comments whose review thread is outdated (default: false) |
 | `--include-resolved` | Include comments whose review thread is already resolved (default: false) |
 | `--language` | Language for the Copilot CLI's evaluation reason (default: the Copilot CLI's default language) |

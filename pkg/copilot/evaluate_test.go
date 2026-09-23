@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 // fakeCopilotBin writes a shell script standing in for the Copilot CLI that
@@ -287,6 +288,54 @@ func TestEvaluateReportsRunErrorWhenOutputIsUnparseable(t *testing.T) {
 
 	if _, _, err := Evaluate(context.Background(), opts, "owner/repo", 1, comment); err == nil {
 		t.Fatal("Evaluate() error = nil, want error when no verdict can be parsed")
+	}
+}
+
+func TestEvaluateReportsWhatFailedInsteadOfTheUsageFooter(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fakeCopilotBin requires a POSIX shell")
+	}
+	output := "You have exceeded your monthly quota (Request ID: abc)\n\nChanges    +0 -0\nAI Credits 241.42 (8m 17s)\nTokens     up 1.9m\nResume     copilot --resume=sess-1"
+	opts := EvaluateOptions{Bin: fakeCopilotBin(t, output, 137), Prompt: "judge"}
+	comment := &Comment{CommentID: 1, URL: "https://example.com/1"}
+
+	_, _, err := Evaluate(context.Background(), opts, "owner/repo", 1, comment)
+	if err == nil {
+		t.Fatal("Evaluate() error = nil, want error when no verdict can be parsed")
+	}
+	if !strings.Contains(err.Error(), "exceeded your monthly quota") {
+		t.Errorf("Evaluate() error = %q, want it to report what failed", err)
+	}
+	if strings.Contains(err.Error(), "Resume") {
+		t.Errorf("Evaluate() error = %q, want the usage footer left out", err)
+	}
+}
+
+// TestRunCopilotCLITimeoutKillsForkedChild covers the copilot executable being a
+// shell wrapper that forks the real CLI: killing only the wrapper leaves the CLI
+// running past the timeout and holding the output pipes open.
+func TestRunCopilotCLITimeoutKillsForkedChild(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the wrapper script requires a POSIX shell")
+	}
+	path := filepath.Join(t.TempDir(), "copilot")
+	script := "#!/bin/sh\nsh -c 'sleep 5; echo done'\n"
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+		t.Fatalf("failed to write wrapper script: %v", err)
+	}
+
+	start := time.Now()
+	output, err := runCopilotCLI(context.Background(), EvaluateOptions{Bin: path, Timeout: 200 * time.Millisecond}, "prompt")
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("runCopilotCLI() error = nil, want the timeout to be reported")
+	}
+	if elapsed > 3*time.Second {
+		t.Errorf("runCopilotCLI() returned after %v, want it to stop waiting once the process tree is killed", elapsed)
+	}
+	if strings.Contains(output, "done") {
+		t.Errorf("runCopilotCLI() output = %q, want the forked child killed with the wrapper", output)
 	}
 }
 

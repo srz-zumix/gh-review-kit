@@ -14,6 +14,16 @@ const deniedMessage = "Permission denied and could not request permission from u
 // "✗ <label>" line may be before the two are considered unrelated.
 const maxDenialLookback = 20
 
+// quotaExceededPattern matches the message the Copilot CLI prints when the
+// account has no quota left, which aborts the run wherever it happens to be.
+var quotaExceededPattern = regexp.MustCompile(`(?i)exceeded your (?:[a-z]+ )?quota`)
+
+// detectQuotaExceeded reports whether output shows the Copilot CLI running out
+// of quota.
+func detectQuotaExceeded(output string) bool {
+	return quotaExceededPattern.MatchString(output)
+}
+
 // deniedCall is a tool call the Copilot CLI denied. The Copilot CLI renders
 // one as a "✗ <label> (<tool>)" line, the command body on "│" continuation
 // lines, and the denial message on a "└" line.

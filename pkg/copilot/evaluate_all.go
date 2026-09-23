@@ -42,6 +42,7 @@ func evaluateAllSequential(ctx context.Context, opts EvaluateOptions, repoSlug s
 	var usage *Usage
 	var allDenials []string
 	var allRecommendations []string
+	var quotaExceeded bool
 	for _, c := range comments {
 		if opts.Log != nil {
 			fmt.Fprintf(opts.Log, "\n--- evaluating comment %d (%s) ---\n", c.CommentID, c.URL)
@@ -53,6 +54,7 @@ func evaluateAllSequential(ctx context.Context, opts EvaluateOptions, repoSlug s
 			res.Denials = u.Denials
 			allDenials = append(allDenials, u.Denials...)
 			allRecommendations = appendUnique(allRecommendations, u.Recommendations)
+			quotaExceeded = quotaExceeded || u.QuotaExceeded
 		}
 		if err != nil {
 			res.Error = err.Error()
@@ -67,6 +69,7 @@ func evaluateAllSequential(ctx context.Context, opts EvaluateOptions, repoSlug s
 		// the session-level Usage must aggregate them across every invocation.
 		usage.Denials = allDenials
 		usage.Recommendations = allRecommendations
+		usage.QuotaExceeded = quotaExceeded
 	}
 	return results, usage
 }

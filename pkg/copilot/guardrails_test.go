@@ -61,6 +61,25 @@ func TestDetectDenials(t *testing.T) {
 	})
 }
 
+func TestDetectQuotaExceeded(t *testing.T) {
+	tests := []struct {
+		name   string
+		output string
+		want   bool
+	}{
+		{"monthly quota", "some output\nYou have exceeded your monthly quota (Request ID: abc)\n", true},
+		{"quota without a period", "You have exceeded your quota\n", true},
+		{"unrelated output", "AI Credits 5 (1s)\n", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := detectQuotaExceeded(tt.output); got != tt.want {
+				t.Errorf("detectQuotaExceeded() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestDetectDeniedCalls(t *testing.T) {
 	t.Run("label tool and body", func(t *testing.T) {
 		output := "✗ Inspect go-github ruleset types (shell)\n" +

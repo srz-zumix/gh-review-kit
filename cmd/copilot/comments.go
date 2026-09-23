@@ -191,6 +191,10 @@ Use --language to have the evaluation reason written in a specific language.`,
 			}
 			if usage != nil {
 				logger.Info("AI credits", "credits", usage.AICredits)
+				if usage.QuotaExceeded {
+					logger.Warn("The Copilot CLI ran out of quota and stopped before finishing; any missing verdict is a consequence of that, not of the comment",
+						"hint", "wait for the quota to reset or upgrade the plan, then re-run")
+				}
 				if len(usage.Denials) > 0 {
 					logger.Warn("Tool calls were denied; the evaluation may be based on incomplete information",
 						"count", len(usage.Denials),
@@ -227,7 +231,7 @@ Use --language to have the evaluation reason written in a specific language.`,
 	f.StringVar(&agent, "agent", "", "Copilot CLI custom agent to use for evaluation")
 	f.BoolVar(&allowAllTools, "allow-all-tools", false, "Allow the Copilot CLI to use any tool without approval during evaluation")
 	f.StringVar(&model, "model", "", "Copilot CLI model to use for evaluation (default: the Copilot CLI's default model)")
-	f.DurationVar(&evaluateTimeout, "evaluate-timeout", 5*time.Minute, "Timeout for a single Copilot CLI evaluation")
+	f.DurationVar(&evaluateTimeout, "evaluate-timeout", 15*time.Minute, "Timeout for a single Copilot CLI evaluation")
 	f.BoolVar(&sandbox, "sandbox", false, "Enable the Copilot CLI's OS-level shell sandbox for the evaluation (also passes --experimental and --add-dir for the current directory)")
 	f.StringVar(&sessionID, "session-id", "", "Copilot CLI session to resume (default: a new session)")
 	f.BoolVar(&rubberDuck, "rubber-duck", false, "Ask the Copilot CLI's built-in rubber duck agent for a second opinion before deciding")

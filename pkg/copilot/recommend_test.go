@@ -191,6 +191,16 @@ func TestNewUsageRecommendsOptionsForDeniedCalls(t *testing.T) {
 	}
 }
 
+func TestNewUsageReportsQuotaExceededWithoutAFooter(t *testing.T) {
+	usage := newUsage(EvaluateOptions{}, "You have exceeded your monthly quota (Request ID: abc)\n")
+	if usage == nil {
+		t.Fatal("newUsage() = nil, want a usage reporting the quota")
+	}
+	if !usage.QuotaExceeded {
+		t.Error("QuotaExceeded = false, want true")
+	}
+}
+
 func TestSandboxSettingsHint(t *testing.T) {
 	got := SandboxSettingsHint([]string{"--allow-tool=shell(grep:*)", "--add-dir=/work/repo", "--add-dir=/tmp"})
 	want := `{"sandbox":{"userPolicy":{"filesystem":{"readonlyPaths":["/work/repo","/tmp"]}}}}`

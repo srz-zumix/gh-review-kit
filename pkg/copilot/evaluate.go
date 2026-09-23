@@ -73,6 +73,13 @@ var jsonArrayBlockPattern = regexp.MustCompile("(?s)```json\\s*(\\[.*?\\])\\s*``
 // footer, whose value may be abbreviated with a k/M suffix.
 var aiCreditsPattern = regexp.MustCompile(`AI Credits\s+([0-9][0-9,]*(?:\.[0-9]+)?)\s*([kKmM]?)`)
 
+// usageFooterPattern matches a line of the Copilot CLI usage footer, which is
+// printed on every run and so never explains a failure.
+var usageFooterPattern = regexp.MustCompile(`^(?:Changes|AI Credits|Tokens|Resume)\s`)
+
+// waitDelay bounds how long to keep reading a killed process tree's output.
+const waitDelay = 5 * time.Second
+
 // Evaluate runs the Copilot CLI to judge whether comment's feedback is correct,
 // using repoSlug (owner/repo) and prNumber as pull request context. The
 // returned Usage is the session total reported by the Copilot CLI, and may be
@@ -144,6 +151,13 @@ func runCopilotCLI(ctx context.Context, opts EvaluateOptions, prompt string) (st
 
 	args := buildArgs(opts, prompt)
 	cmd := exec.CommandContext(runCtx, bin, args...)
+	// The copilot executable can be a shell wrapper that forks the real CLI, so
+	// signalling cmd alone would leave the CLI running past the timeout.
+	setProcessGroup(cmd)
+	cmd.Cancel = func() error { return killProcessGroup(cmd) }
+	// A process that survives the signal must not hold the output pipes, and
+	// therefore cmd.Run, open indefinitely.
+	cmd.WaitDelay = waitDelay
 
 	var buf bytes.Buffer
 	cmd.Stdout = &buf
@@ -208,7 +222,8 @@ func sandboxWorkingDir(opts EvaluateOptions) string {
 func newUsage(opts EvaluateOptions, output string) *Usage {
 	usage := parseUsage(output)
 	calls := detectDeniedCalls(output)
-	if usage == nil && len(calls) == 0 {
+	quotaExceeded := detectQuotaExceeded(output)
+	if usage == nil && len(calls) == 0 && !quotaExceeded {
 		return nil
 	}
 	if usage == nil {
@@ -216,6 +231,7 @@ func newUsage(opts EvaluateOptions, output string) *Usage {
 	}
 	usage.Denials = denialLabels(calls)
 	usage.Recommendations = recommendPermissions(opts, calls)
+	usage.QuotaExceeded = quotaExceeded
 	return usage
 }
 
@@ -242,13 +258,17 @@ func parseUsage(output string) *Usage {
 
 // lastLines returns the last n non-empty trimmed lines of s, joined by "; ",
 // to give a short diagnostic hint when the full output isn't otherwise visible.
+// Usage footer lines are left out, since they always trail the output and would
+// crowd out the message that explains the failure.
 func lastLines(s string, n int) string {
 	fields := strings.FieldsFunc(s, func(r rune) bool { return r == '\n' })
 	lines := make([]string, 0, len(fields))
 	for _, f := range fields {
-		if t := strings.TrimSpace(f); t != "" {
-			lines = append(lines, t)
+		t := strings.TrimSpace(f)
+		if t == "" || usageFooterPattern.MatchString(t) {
+			continue
 		}
+		lines = append(lines, t)
 	}
 	if len(lines) > n {
 		lines = lines[len(lines)-n:]

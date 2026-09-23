@@ -644,7 +644,7 @@ Use `--sandbox` to enable the Copilot CLI's OS-level shell sandbox for the evalu
 - `--copilot-bin`: Copilot CLI executable name or path (optional, default: `copilot`)
 - `--dryrun, -n`: Report the action that would be taken without performing it (optional, default: false)
 - `--evaluate`: Judge each comment with the Copilot CLI and act on the verdict (optional, default: false)
-- `--evaluate-timeout`: Timeout for a single Copilot CLI evaluation (optional, default: `5m`)
+- `--evaluate-timeout`: Timeout for a single Copilot CLI evaluation (optional, default: `15m`)
 - `--include-outdated`: Include comments whose review thread is outdated (optional, default: false)
 - `--include-resolved`: Include comments whose review thread is already resolved (optional, default: false)
 - `--language`: Language for the Copilot CLI's evaluation reason (optional, default: the Copilot CLI's default language)
