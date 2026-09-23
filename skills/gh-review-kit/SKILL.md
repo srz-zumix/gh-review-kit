@@ -1,6 +1,6 @@
 ---
 name: gh-review-kit
-description: GitHub CLI extension (gh review-kit) for managing GitHub pull request reviews — including listing check runs with advanced filtering, displaying logs for failed checks, re-requesting reviews, building/analyzing normalized datasets of PR review feedback for large-scale review-comment mining, and embedding Git provenance metadata into video files.
+description: GitHub CLI extension (gh review-kit) for managing GitHub pull request reviews — including listing check runs with advanced filtering, displaying logs for failed checks, re-requesting reviews, building/analyzing normalized datasets of PR review feedback for large-scale review-comment mining, embedding Git provenance metadata into video files, and judging/acting on GitHub Copilot code review comments.
 ---
 
 # gh-review-kit
@@ -45,6 +45,12 @@ gh review-kit                       # Root command
 │   ├── bundle                      # Split a dataset into Agent-sized JSONL bundles
 │   ├── suggest-rules               # Rank candidate coding rules / review viewpoints
 │   └── report                      # Generate a Markdown/JSON report from a dataset
+├── copilot                         # Judge and act on Copilot code review comments
+│   ├── comments                    # List, and optionally evaluate, Copilot review comments
+│   ├── feedback                    # Leave a reaction on pull request review comments
+│   ├── resolve                     # Resolve pull request review threads by comment ID
+│   ├── review-request              # Request a Copilot code review when the latest commit is unreviewed
+│   └── status                      # Show the Copilot code review status of a pull request
 ├── rerequest                       # Re-request review for a pull request
 ├── reviewed                        # Mark files in a pull request as viewed
 ├── skills                          # Manage agent skills
@@ -604,6 +610,235 @@ gh review-kit comments report --dataset ./dataset \
   --review-states CHANGES_REQUESTED --since 2025-10-01T00:00:00Z
 ```
 
+## List Copilot Review Comments (copilot comments)
+
+List GitHub Copilot code review comments on a pull request. By default, resolved and outdated review threads are excluded.
+
+Use `--evaluate` to additionally judge each comment with the [Copilot CLI](https://github.com/github/copilot-cli): comments judged invalid receive a thumbs-down reaction and have their review thread resolved with resolution reason `INVALID`; comments judged valid have their review thread resolved with resolution reason `ADDRESSED`. The prompt used to judge comments must be supplied with `--prompt` or `--prompt-file`; gh-review-kit does not ship a built-in evaluation prompt — it is up to the caller to describe how to judge a comment.
+
+The Copilot CLI runs in non-interactive mode (`-p`) for evaluation, so it can never prompt for tool permissions and denies anything not pre-authorized, regardless of whether the command is run from a terminal or in CI. Use `--allow-all-tools` to allow every tool, or pass arguments after a `--` separator to forward them to the Copilot CLI, e.g. `-- --allow-tool=... --deny-tool=...` to scope permissions more tightly (an organization's Copilot policy may disable these bypass options entirely). Without either, a warning is printed before evaluation starts, and any tool calls the Copilot CLI denies are reported as a warning afterward, since they may leave its judgement based on incomplete information.
+
+The Copilot CLI keeps tool, path, and URL permissions in separate categories, so `--allow-all-tools` authorizes tool execution but not file access outside the working directory. Denied tool calls are therefore also reported with the options that would have allowed them, as a `--` passthrough list to paste onto a re-run, e.g. `-- --allow-tool='shell(go:*)' --add-dir=/path/to/module/cache`. Paths are always narrowed to `--add-dir`; `--allow-all-paths` is never recommended. Note that `--sandbox` enforces an OS-level filesystem policy on top of these permissions, so denials on paths no `--add-dir` can reach, such as symlinks out of the working directory or network access, persist until `--sandbox` is dropped.
+
+Use `--model` to select the Copilot CLI model used for evaluation, and `--rubber-duck` to additionally ask the Copilot CLI's built-in [rubber duck agent](https://docs.github.com/en/copilot/concepts/agents/copilot-cli/rubber-duck) for a second opinion before it decides; the rubber duck agent runs on a different model, so this adds latency and model usage.
+
+Every comment is judged with a single Copilot CLI invocation, which avoids repeated context and keeps AI credits down at the cost of a single combined judgement pass. Use `--batch=false` to run one invocation per comment instead.
+
+Each run starts a new Copilot CLI session, so runs never inherit each other's context. The session ID is written to stderr both before and after the evaluation, along with the Copilot CLI output and the AI credits the session consumed. Pass that ID back with `--session-id` to resume the session, for example to keep the context of a previous run.
+
+Use `--sandbox` to enable the Copilot CLI's OS-level shell sandbox for the evaluation. This also passes `--experimental`, since the Copilot CLI otherwise ignores `--sandbox`, and `--add-dir` for the directory the command runs in, since the sandbox otherwise blocks reading the checked-out repository. When paths are recommended, a `~/.copilot/settings.json` fragment granting them under `sandbox.userPolicy.filesystem.readonlyPaths` is printed as well, so the grant can be made permanent instead of repeated on every run; the Copilot CLI reads repository settings (`.github/copilot/settings.json` and `settings.local.json`) only in interactive mode, so they have no effect here.
+
+```bash
+gh review-kit copilot comments [flags] [-- copilot-cli-arg...]
+```
+
+### Options
+
+| Flag | Description |
+| --- | --- |
+| `--agent` | Copilot CLI custom agent to use for evaluation |
+| `--allow-all-tools` | Allow the Copilot CLI to use any tool without approval during evaluation (default: false) |
+| `--author` | Comment author logins to match (repeatable, default: `copilot-pull-request-reviewer`) |
+| `--batch` | Judge every comment with a single Copilot CLI invocation instead of one per comment (default: true) |
+| `--copilot-bin` | Copilot CLI executable name or path (default: `copilot`) |
+| `--dryrun, -n` | Report the action that would be taken without performing it (default: false) |
+| `--evaluate` | Judge each comment with the Copilot CLI and act on the verdict (default: false) |
+| `--evaluate-timeout` | Timeout for a single Copilot CLI evaluation, per comment; a batch run is given this much for every comment it covers (default: `15m`) |
+| `--include-outdated` | Include comments whose review thread is outdated (default: false) |
+| `--include-resolved` | Include comments whose review thread is already resolved (default: false) |
+| `--language` | Language for the Copilot CLI's evaluation reason (default: the Copilot CLI's default language) |
+| `--model` | Copilot CLI model to use for evaluation (default: the Copilot CLI's default model) |
+| `--pr` | Pull request number, URL, or branch name (default: current branch) |
+| `--prompt, -p` | Prompt used to judge comments with the Copilot CLI (required with `--evaluate`, mutually exclusive with `--prompt-file`) |
+| `--prompt-file` | File containing the prompt used to judge comments with the Copilot CLI (required with `--evaluate`, mutually exclusive with `--prompt`) |
+| `--repo, -R` | Repository in the format 'owner/repo' (default: current repository) |
+| `--rubber-duck` | Ask the Copilot CLI's built-in rubber duck agent for a second opinion before deciding (default: false) |
+| `--sandbox` | Enable the Copilot CLI's OS-level shell sandbox for the evaluation (default: false; also passes `--experimental` and `--add-dir` for the current directory) |
+| `--session-id` | Copilot CLI session to resume (default: a new session) |
+| `-- copilot-cli-arg...` | Arguments forwarded verbatim to the Copilot CLI after a `--` separator (repeatable) |
+
+### Examples
+
+```bash
+# List open Copilot review comments for the current branch
+gh review-kit copilot comments
+
+# List Copilot review comments including resolved and outdated threads
+gh review-kit copilot comments --pr 123 --include-resolved --include-outdated
+
+# Judge each comment with the Copilot CLI, allowing every tool without prompting
+gh review-kit copilot comments --pr 123 --evaluate --prompt-file ./judge-prompt.md --allow-all-tools
+
+# Judge each comment, scoping permissions to only what's needed instead of allowing everything
+gh review-kit copilot comments --pr 123 --evaluate --prompt-file ./judge-prompt.md -- --allow-tool=read
+
+# Judge each comment with its own Copilot CLI invocation instead of a single combined pass
+gh review-kit copilot comments --pr 123 --evaluate --batch=false --prompt-file ./judge-prompt.md --allow-all-tools
+
+# Judge each comment with a specific model, and get a rubber duck second opinion
+gh review-kit copilot comments --pr 123 --evaluate --prompt-file ./judge-prompt.md --allow-all-tools --model gpt-5 --rubber-duck
+
+# Judge each comment and have the evaluation reason written in Japanese
+gh review-kit copilot comments --pr 123 --evaluate --prompt-file ./judge-prompt.md --language Japanese --allow-all-tools
+
+# Preview the actions an evaluation run would take, without performing them
+gh review-kit copilot comments --pr 123 --evaluate --prompt-file ./judge-prompt.md --dryrun --allow-all-tools
+
+# Judge each comment with the Copilot CLI's OS-level shell sandbox enabled
+gh review-kit copilot comments --pr 123 --evaluate --prompt-file ./judge-prompt.md --sandbox --allow-all-tools
+
+# Resume a previous Copilot CLI session to keep its context
+gh review-kit copilot comments --pr 123 --evaluate --prompt-file ./judge-prompt.md --session-id 0b2d6f5e-... --allow-all-tools
+```
+
+## Give Feedback on Review Comments (copilot feedback)
+
+Leave a reaction on one or more pull request review comments, typically to report that a GitHub Copilot code review comment was incorrect. Defaults to a thumbs-down (`-1`) reaction; use `--content` to send a different reaction.
+
+Each comment can be given as a bare comment ID or as a review comment URL (`https://github.com/owner/repo/pull/123#discussion_r456789`); URLs also determine the target repository when `--repo` is omitted.
+
+```bash
+gh review-kit copilot feedback <comment-id-or-url>... [flags]
+```
+
+### Options
+
+| Flag | Description |
+| --- | --- |
+| `--content` | Reaction content: `+1`, `-1`, `laugh`, `confused`, `heart`, `hooray`, `rocket`, `eyes` (default: `-1`) |
+| `--pr` | Pull request number, URL, or branch name, used to resolve the repository when `--repo` is omitted |
+| `--repo, -R` | Repository in the format 'owner/repo' (default: current repository) |
+
+### Examples
+
+```bash
+# Give negative feedback on a single Copilot review comment
+gh review-kit copilot feedback 123456789 --repo owner/repo
+
+# Give negative feedback on several comments at once
+gh review-kit copilot feedback 123456789 123456790 --pr 123
+
+# Give positive feedback on a comment
+gh review-kit copilot feedback 123456789 --pr 123 --content +1
+
+# Give negative feedback using the comment's URL, without --repo/--pr
+gh review-kit copilot feedback https://github.com/owner/repo/pull/123#discussion_r456789
+```
+
+## Resolve Review Threads (copilot resolve)
+
+Resolve the review thread containing each of the given pull request review comment IDs. Use `--unresolve` to reopen the threads instead.
+
+Each comment can be given as a bare comment ID or as a review comment URL (`https://github.com/owner/repo/pull/123#discussion_r456789`); URLs also determine the target repository and pull request when `--repo`/`--pr` are omitted.
+
+```bash
+gh review-kit copilot resolve <comment-id-or-url>... [flags]
+```
+
+### Options
+
+| Flag | Description |
+| --- | --- |
+| `--pr` | Pull request number, URL, or branch name (default: current branch) |
+| `--reason` | Resolution reason: `addressed`, `wont-fix`, or `invalid` (default: none, mutually exclusive with `--unresolve`) |
+| `--repo, -R` | Repository in the format 'owner/repo' (default: current repository) |
+| `--unresolve` | Reopen the threads instead of resolving them (default: false) |
+
+### Examples
+
+```bash
+# Resolve the thread for a fixed Copilot review comment
+gh review-kit copilot resolve 123456789 --pr 123
+
+# Resolve several comments' threads at once
+gh review-kit copilot resolve 123456789 123456790 --pr 123
+
+# Resolve the thread for an incorrect Copilot review comment
+gh review-kit copilot resolve 123456789 --pr 123 --reason invalid
+
+# Reopen a previously resolved thread
+gh review-kit copilot resolve 123456789 --pr 123 --unresolve
+
+# Resolve using the comment's URL, without --repo/--pr
+gh review-kit copilot resolve https://github.com/owner/repo/pull/123#discussion_r456789
+```
+
+## Request a Copilot Review (copilot review-request)
+
+Request a code review from GitHub Copilot on a pull request, the same as requesting a review from a human reviewer. The request is only sent when the latest commit has not been reviewed yet:
+
+| State | Action |
+| --- | --- |
+| Copilot has never been requested | request a review |
+| Copilot reviewed an earlier commit only | request a review again |
+| Copilot is a requested reviewer already | nothing to do |
+| Copilot has reviewed the latest commit | nothing to do |
+
+Use `--force` to request a review regardless of that state.
+
+Copilot's [review effort level](https://docs.github.com/en/copilot/concepts/agents/code-review#review-effort-level) (Lite or Balanced) cannot be selected through this command: neither the REST `requested_reviewers` endpoint nor the GraphQL `requestReviews` mutation exposes a parameter for it, so the pull request's or organization's configured default effort level is always used. Change the default in the repository or organization settings, or select it manually in the pull request's Reviewers section on GitHub.com, if a specific effort level is needed.
+
+```bash
+gh review-kit copilot review-request [pull-request-number] [flags]
+```
+
+**Aliases:** `rr`
+
+### Options
+
+| Flag | Description |
+| --- | --- |
+| `--force` | Request a review even when the latest commit has already been reviewed (default: false) |
+| `--repo, -R` | Repository in the format 'owner/repo' (default: current repository) |
+
+### Examples
+
+```bash
+# Request a Copilot review on the current branch's pull request
+gh review-kit copilot review-request
+
+# Request a Copilot review on a specific pull request
+gh review-kit copilot rr 123 --repo owner/repo
+
+# Request a review even though the latest commit has already been reviewed
+gh review-kit copilot review-request --force
+```
+
+## Show Copilot Review Status (copilot status)
+
+Show where GitHub Copilot's code review of a pull request stands, together with the number of Copilot review comments and how many of them are still unresolved. If `pull-request-number` is omitted, the pull request for the current branch is used.
+
+The reported status is one of `not_requested`, `in_progress`, `commented`, `approved`, `changes_requested`, or `dismissed`. A pending review request takes precedence, so a pull request that Copilot has already reviewed and is reviewing again is reported as `in_progress`.
+
+`head_reviewed` tells whether Copilot reviewed the latest commit of the pull request. A `false` means every review it submitted predates the newest push, so the current code has not been reviewed yet.
+
+```bash
+gh review-kit copilot status [pull-request-number] [flags]
+```
+
+### Options
+
+| Flag | Description |
+| --- | --- |
+| `--format` | Output format: `text`, `json` (default: `text`) |
+| `--repo, -R` | Repository in the format 'owner/repo' (default: current repository) |
+
+### Examples
+
+```bash
+# Show the Copilot review status of the current branch's pull request
+gh review-kit copilot status
+
+# Show the Copilot review status of a specific pull request
+gh review-kit copilot status 123 --repo owner/repo
+
+# Check whether Copilot is still reviewing
+gh review-kit copilot status 123 --format json --jq .status
+
+# Check whether the latest commit has been reviewed
+gh review-kit copilot status 123 --format json --jq .head_reviewed
+```
+
 ## Re-request Review (rerequest)
 
 Re-request review for a pull request.
@@ -774,6 +1009,24 @@ gh review-kit checks list 123 --required --details
 
 # View logs for required failed checks only
 gh review-kit checks failure 123 --required
+```
+
+### Judge and Act on Copilot Review Comments
+
+Fetch GitHub Copilot's code review comments, judge each one with the Copilot CLI using a caller-supplied prompt, and act on the verdict: give negative feedback and resolve the thread for comments judged incorrect.
+
+```bash
+# List Copilot review comments needing attention
+gh review-kit copilot comments --pr 123
+
+# Judge each comment and automatically give feedback / resolve invalid ones
+gh review-kit copilot comments --pr 123 --evaluate --prompt-file ./judge-prompt.md
+
+# Manually give negative feedback on a comment found to be wrong
+gh review-kit copilot feedback 123456789 --pr 123
+
+# Manually resolve the thread for a comment that has since been fixed
+gh review-kit copilot resolve 123456789 --pr 123
 ```
 
 ### Mine Review Comments at Scale
