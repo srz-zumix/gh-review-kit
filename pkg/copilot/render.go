@@ -50,7 +50,7 @@ func RenderEvaluationResults(r *render.Renderer, results []*EvaluationResult) er
 			r.WriteLine("")
 		}
 		verdict := ""
-		reason := res.Error
+		reason := ""
 		if res.Evaluation != nil {
 			verdict = string(res.Evaluation.Verdict)
 			reason = res.Evaluation.Reason
@@ -59,6 +59,9 @@ func RenderEvaluationResults(r *render.Renderer, results []*EvaluationResult) er
 		r.WriteLine(fmt.Sprintf("verdict=%s", verdict))
 		r.WriteLine(fmt.Sprintf("action=%s", res.Action))
 		r.WriteLine(fmt.Sprintf("reason=%s", reason))
+		if res.Error != "" {
+			r.WriteLine(fmt.Sprintf("error=%s", res.Error))
+		}
 	}
 	return nil
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/cli/go-gh/v2/pkg/repository"
 	"github.com/srz-zumix/go-gh-extension/pkg/gh"
@@ -13,8 +14,11 @@ import (
 // verdict (see ApplyEvaluation), either with one Copilot CLI invocation per
 // comment (batch is false) or a single invocation covering every comment
 // (batch is true). It returns one EvaluationResult per comment, in the same
-// order as comments, plus the most recent Usage the Copilot CLI reported.
-func EvaluateAll(ctx context.Context, g *gh.GitHubClient, repo repository.Repository, opts EvaluateOptions, repoSlug string, prNumber int, comments []*Comment, batch bool, dryRun bool) ([]*EvaluationResult, *Usage) {
+// order as comments, plus the most recent Usage the Copilot CLI reported. The
+// returned error is non-nil when any comment failed to be evaluated or acted
+// on; the per-comment details are retained in the results so callers can
+// still render every outcome.
+func EvaluateAll(ctx context.Context, g *gh.GitHubClient, repo repository.Repository, opts EvaluateOptions, repoSlug string, prNumber int, comments []*Comment, batch bool, dryRun bool) ([]*EvaluationResult, *Usage, error) {
 	var results []*EvaluationResult
 	var usage *Usage
 	if batch {
@@ -33,7 +37,27 @@ func EvaluateAll(ctx context.Context, g *gh.GitHubClient, repo repository.Reposi
 			res.Error = err.Error()
 		}
 	}
-	return results, usage
+	return results, usage, aggregateErrors(results)
+}
+
+// aggregateErrors returns a single error summarizing every comment that
+// failed to be evaluated or acted on, or nil when all results succeeded. A
+// result with neither an Evaluation nor a recorded Error is treated as a
+// failure, since a comment must always yield a verdict or an explanation.
+func aggregateErrors(results []*EvaluationResult) error {
+	var failed []string
+	for _, res := range results {
+		if res.Evaluation == nil && res.Error == "" {
+			res.Error = "no evaluation was produced"
+		}
+		if res.Error != "" {
+			failed = append(failed, fmt.Sprintf("comment %d: %s", res.Comment.CommentID, res.Error))
+		}
+	}
+	if len(failed) == 0 {
+		return nil
+	}
+	return fmt.Errorf("%d of %d comments failed to evaluate: %s", len(failed), len(results), strings.Join(failed, "; "))
 }
 
 // evaluateAllSequential runs one Copilot CLI invocation per comment.

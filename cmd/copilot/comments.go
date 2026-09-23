@@ -184,7 +184,7 @@ Use --language to have the evaluation reason written in a specific language.`,
 				Log:           log,
 			}
 
-			results, usage := pkgcopilot.EvaluateAll(ctx, client, repository, evalOpts, repoSlug, pr.GetNumber(), comments, batch, dryRun)
+			results, usage, evalErr := pkgcopilot.EvaluateAll(ctx, client, repository, evalOpts, repoSlug, pr.GetNumber(), comments, batch, dryRun)
 
 			if err := pkgcopilot.RenderEvaluationResults(renderer, results); err != nil {
 				return err
@@ -213,7 +213,7 @@ Use --language to have the evaluation reason written in a specific language.`,
 				}
 			}
 			logger.Info("Copilot session", "session_id", sessionID, "hint", "pass --session-id to resume it")
-			return nil
+			return evalErr
 		},
 	}
 
