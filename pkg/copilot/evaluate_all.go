@@ -42,6 +42,7 @@ func evaluateAllSequential(ctx context.Context, opts EvaluateOptions, repoSlug s
 	var usage *Usage
 	var allDenials []string
 	var allRecommendations []string
+	var allWritablePaths []string
 	var quotaExceeded bool
 	for _, c := range comments {
 		if opts.Log != nil {
@@ -54,6 +55,7 @@ func evaluateAllSequential(ctx context.Context, opts EvaluateOptions, repoSlug s
 			res.Denials = u.Denials
 			allDenials = append(allDenials, u.Denials...)
 			allRecommendations = appendUnique(allRecommendations, u.Recommendations)
+			allWritablePaths = appendUnique(allWritablePaths, u.WritablePaths)
 			quotaExceeded = quotaExceeded || u.QuotaExceeded
 		}
 		if err != nil {
@@ -69,6 +71,7 @@ func evaluateAllSequential(ctx context.Context, opts EvaluateOptions, repoSlug s
 		// the session-level Usage must aggregate them across every invocation.
 		usage.Denials = allDenials
 		usage.Recommendations = allRecommendations
+		usage.WritablePaths = allWritablePaths
 		usage.QuotaExceeded = quotaExceeded
 	}
 	return results, usage

@@ -43,20 +43,35 @@ var ungrantableDirs = map[string]bool{
 // pathBypassOptions make --add-dir recommendations redundant.
 var pathBypassOptions = []string{"--allow-all-paths", "--allow-all", "--yolo"}
 
+// writeCommands are the commands whose every path argument is written to.
+// Commands where only some arguments are a destination (cp, mv, sed -i) are
+// left out on purpose: a missing write shows up as another denial, while an
+// unneeded one stays in the user's settings for good.
+var writeCommands = map[string]bool{
+	"mkdir":    true,
+	"rm":       true,
+	"rmdir":    true,
+	"tee":      true,
+	"touch":    true,
+	"truncate": true,
+}
+
 // commandNamePattern matches a plausible command name, so that a quoted string
 // or an option leading a mis-split segment is not turned into a permission.
 var commandNamePattern = regexp.MustCompile(`^[A-Za-z0-9_.][A-Za-z0-9_.-]*$`)
 
 // recommendPermissions returns the Copilot CLI options that would have allowed
-// the denied calls, most specific first. Options already in effect are
-// omitted, and --allow-all-paths is never suggested: paths are narrowed to
-// --add-dir so a re-run stays as restricted as the denials allow.
-func recommendPermissions(opts EvaluateOptions, calls []deniedCall) []string {
+// the denied calls, most specific first, along with the directories the calls
+// were going to write to. Options already in effect are omitted, and
+// --allow-all-paths is never suggested: paths are narrowed to --add-dir so a
+// re-run stays as restricted as the denials allow.
+func recommendPermissions(opts EvaluateOptions, calls []deniedCall) (options []string, writable []string) {
 	if len(calls) == 0 {
-		return nil
+		return nil, nil
 	}
 	existing := existingOptions(opts)
-	return append(recommendToolOptions(calls, existing), recommendDirOptions(opts, calls, existing)...)
+	dirOptions, writable := recommendDirOptions(opts, calls, existing)
+	return append(recommendToolOptions(calls, existing), dirOptions...), writable
 }
 
 // recommendToolOptions returns --allow-tool options for the commands the
@@ -141,34 +156,63 @@ func splitCommand(segment string) (string, []string) {
 
 // recommendDirOptions returns --add-dir options for the directories the denied
 // calls touched, dropping any directory already covered by an ancestor or by
-// the working directory the sandbox is granted. Only arguments are considered:
-// the sandbox already grants the directories on PATH that the commands
-// themselves live in.
-func recommendDirOptions(opts EvaluateOptions, calls []deniedCall, existing map[string]bool) []string {
+// the working directory the sandbox is granted, along with the subset the
+// calls were definitely going to write to. Only arguments are considered: the
+// sandbox already grants the directories on PATH that the commands themselves
+// live in.
+func recommendDirOptions(opts EvaluateOptions, calls []deniedCall, existing map[string]bool) (options []string, writable []string) {
 	for _, option := range pathBypassOptions {
 		if existing[option] {
-			return nil
+			return nil, nil
 		}
 	}
 	granted := sandboxWorkingDir(opts)
 	var dirs []string
 	for _, c := range calls {
 		for _, segment := range splitShellSegments(joinBody(c.Body)) {
-			_, args := splitCommand(segment)
+			name, args := splitCommand(segment)
+			writes := writeCommands[name]
+			pendingRedirect := false
 			for _, arg := range args {
-				if dir := pathGrant(arg); dir != "" && !covers(granted, dir) {
-					dirs = append(dirs, dir)
+				token, redirected := splitRedirect(arg)
+				if redirected && token == "" {
+					pendingRedirect = true
+					continue
+				}
+				redirected = redirected || pendingRedirect
+				pendingRedirect = false
+				dir := pathGrant(token)
+				if dir == "" || covers(granted, dir) {
+					continue
+				}
+				dirs = append(dirs, dir)
+				if writes || redirected {
+					writable = append(writable, dir)
 				}
 			}
 		}
 	}
-	options := make([]string, 0, len(dirs))
+	options = make([]string, 0, len(dirs))
 	for _, dir := range collapseDirs(dirs) {
 		if option := "--add-dir=" + dir; !existing[option] {
 			options = append(options, option)
 		}
 	}
-	return options
+	return options, collapseDirs(writable)
+}
+
+// splitRedirect strips the shell output redirection an argument can lead with,
+// reporting whether one was there. An empty result means the redirection
+// target is the argument that follows.
+func splitRedirect(arg string) (string, bool) {
+	trimmed := strings.TrimLeft(arg, "0123456789&")
+	if rest, ok := strings.CutPrefix(trimmed, ">>"); ok {
+		return rest, true
+	}
+	if rest, ok := strings.CutPrefix(trimmed, ">"); ok {
+		return strings.TrimPrefix(rest, "|"), true
+	}
+	return arg, false
 }
 
 // joinBody rebuilds the command line a denied call's body lines render. The
@@ -301,28 +345,63 @@ func existingOptions(opts EvaluateOptions) map[string]bool {
 // directory was recommended. User settings are the only durable place for it:
 // the Copilot CLI reads repository settings (.github/copilot/settings.json and
 // settings.local.json) only in interactive mode, never in the -p mode used
-// here.
-func SandboxSettingsHint(options []string) string {
-	var dirs []string
+// here. A directory is granted read-write only when writablePaths shows a
+// denied call was going to write into it; read access is enough otherwise.
+func SandboxSettingsHint(options []string, writablePaths []string) string {
+	var readonly, readwrite []string
 	for _, option := range options {
-		if dir, ok := strings.CutPrefix(option, "--add-dir="); ok {
-			dirs = append(dirs, dir)
+		dir, ok := strings.CutPrefix(option, "--add-dir=")
+		if !ok {
+			continue
 		}
+		if needsWrite(dir, writablePaths) {
+			readwrite = append(readwrite, resolveSymlinks(dir))
+			continue
+		}
+		readonly = append(readonly, resolveSymlinks(dir))
 	}
-	if len(dirs) == 0 {
+	if len(readonly)+len(readwrite) == 0 {
 		return ""
+	}
+	filesystem := make(map[string]any, 2)
+	if len(readonly) > 0 {
+		filesystem["readonlyPaths"] = collapseDirs(readonly)
+	}
+	if len(readwrite) > 0 {
+		filesystem["readwritePaths"] = collapseDirs(readwrite)
 	}
 	fragment, err := json.Marshal(map[string]any{
 		"sandbox": map[string]any{
-			"userPolicy": map[string]any{
-				"filesystem": map[string]any{"readonlyPaths": dirs},
-			},
+			"userPolicy": map[string]any{"filesystem": filesystem},
 		},
 	})
 	if err != nil {
 		return ""
 	}
 	return string(fragment)
+}
+
+// needsWrite reports whether granting dir has to allow writes, which is so
+// when dir holds a path a denied call was going to write to.
+func needsWrite(dir string, writablePaths []string) bool {
+	for _, path := range writablePaths {
+		if covers(dir, path) {
+			return true
+		}
+	}
+	return false
+}
+
+// resolveSymlinks returns the real path of dir, which the OS-level sandbox
+// policy matches against: on macOS /tmp is a link to /private/tmp, so a policy
+// naming /tmp never applies. The path is returned untouched when it cannot be
+// resolved, leaving a hint that is no worse than before.
+func resolveSymlinks(dir string) string {
+	resolved, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return dir
+	}
+	return resolved
 }
 
 // FormatRecommendations renders recommended options as an argument list that

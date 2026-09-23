@@ -205,7 +205,7 @@ Use --language to have the evaluation reason written in a specific language.`,
 						"options", "-- "+pkgcopilot.FormatRecommendations(usage.Recommendations))
 					if sandbox {
 						logger.Warn(pkgcopilot.SandboxDenialNote)
-						if hint := pkgcopilot.SandboxSettingsHint(usage.Recommendations); hint != "" {
+						if hint := pkgcopilot.SandboxSettingsHint(usage.Recommendations, usage.WritablePaths); hint != "" {
 							logger.Warn("Merge this into ~/.copilot/settings.json to grant the paths for every run",
 								"settings", hint)
 						}

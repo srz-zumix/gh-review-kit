@@ -164,6 +164,24 @@ func TestBuildPrompt(t *testing.T) {
 	if !(bodyIdx < duckIdx && duckIdx < contractIdx) {
 		t.Errorf("buildPrompt() sections out of order: body=%d duck=%d contract=%d", bodyIdx, duckIdx, contractIdx)
 	}
+
+	beginIdx := strings.Index(with, "--- BEGIN UNTRUSTED DATA ")
+	endIdx := strings.Index(with, "--- END UNTRUSTED DATA ")
+	if beginIdx < 0 || endIdx < 0 {
+		t.Fatalf("buildPrompt() missing untrusted-data markers: %q", with)
+	}
+	// Every pull-request-derived field must sit inside the untrusted block.
+	for _, field := range []string{comment.URL, comment.Path, comment.DiffHunk, comment.Body} {
+		idx := strings.Index(with, field)
+		if idx < beginIdx || idx > endIdx {
+			t.Errorf("buildPrompt() field %q not enclosed in untrusted block (idx=%d begin=%d end=%d)", field, idx, beginIdx, endIdx)
+		}
+	}
+	// The rubber-duck request and output contract are trusted instructions and
+	// must follow the closing marker.
+	if !(endIdx < duckIdx && endIdx < contractIdx) {
+		t.Errorf("buildPrompt() instructions leaked inside untrusted block: end=%d duck=%d contract=%d", endIdx, duckIdx, contractIdx)
+	}
 }
 
 func TestBuildBatchPrompt(t *testing.T) {
@@ -181,6 +199,26 @@ func TestBuildBatchPrompt(t *testing.T) {
 	}
 	if strings.Count(got, "@@ -1 +1 @@") != 1 {
 		t.Errorf("buildBatchPrompt() repeated an identical diff hunk instead of deduplicating it")
+	}
+
+	beginIdx := strings.Index(got, "--- BEGIN UNTRUSTED DATA ")
+	endIdx := strings.Index(got, "--- END UNTRUSTED DATA ")
+	contractIdx := strings.Index(got, "output your final judgement")
+	if beginIdx < 0 || endIdx < 0 || contractIdx < 0 {
+		t.Fatalf("buildBatchPrompt() missing expected markers/contract: %q", got)
+	}
+	// Every comment's untrusted fields must sit inside the single block, and the
+	// output contract must follow the closing marker.
+	for _, c := range comments {
+		for _, field := range []string{c.URL, c.Body} {
+			idx := strings.Index(got, field)
+			if idx < beginIdx || idx > endIdx {
+				t.Errorf("buildBatchPrompt() field %q not enclosed in untrusted block", field)
+			}
+		}
+	}
+	if endIdx > contractIdx {
+		t.Errorf("buildBatchPrompt() output contract leaked inside untrusted block: end=%d contract=%d", endIdx, contractIdx)
 	}
 }
 

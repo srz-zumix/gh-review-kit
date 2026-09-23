@@ -69,7 +69,7 @@ func TestRecommendToolOptions(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := recommendPermissions(tt.opts, tt.calls)
+			got, _ := recommendPermissions(tt.opts, tt.calls)
 			if len(got) == 0 && len(tt.want) == 0 {
 				return
 			}
@@ -161,12 +161,58 @@ func TestRecommendDirOptions(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.opts.AllowAllTools = true
-			got := recommendPermissions(tt.opts, tt.calls)
+			got, _ := recommendPermissions(tt.opts, tt.calls)
 			if len(got) == 0 && len(tt.want) == 0 {
 				return
 			}
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("recommendPermissions() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRecommendDirOptionsDetectsWrites(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "out.go")
+
+	tests := []struct {
+		name  string
+		calls []deniedCall
+		want  []string
+	}{
+		{
+			name:  "redirection target",
+			calls: []deniedCall{denied("shell", "cat > "+file)},
+			want:  []string{dir},
+		},
+		{
+			name:  "redirection attached to its target",
+			calls: []deniedCall{denied("shell", "go build 2>>"+file)},
+			want:  []string{dir},
+		},
+		{
+			name:  "command that writes every argument",
+			calls: []deniedCall{denied("shell", "touch "+file)},
+			want:  []string{dir},
+		},
+		{
+			name:  "reading command",
+			calls: []deniedCall{denied("shell", "cat "+file)},
+		},
+		{
+			name:  "ambiguous destination stays read-only",
+			calls: []deniedCall{denied("shell", "cp /etc/hosts "+file)},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, got := recommendPermissions(EvaluateOptions{AllowAllTools: true}, tt.calls)
+			if len(got) == 0 && len(tt.want) == 0 {
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("recommendPermissions() writable = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -202,13 +248,41 @@ func TestNewUsageReportsQuotaExceededWithoutAFooter(t *testing.T) {
 }
 
 func TestSandboxSettingsHint(t *testing.T) {
-	got := SandboxSettingsHint([]string{"--allow-tool=shell(grep:*)", "--add-dir=/work/repo", "--add-dir=/tmp"})
-	want := `{"sandbox":{"userPolicy":{"filesystem":{"readonlyPaths":["/work/repo","/tmp"]}}}}`
+	root := t.TempDir()
+	target := filepath.Join(root, "target")
+	if err := os.Mkdir(target, 0o755); err != nil {
+		t.Fatalf("Mkdir() = %v", err)
+	}
+	link := filepath.Join(root, "link")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatalf("Symlink() = %v", err)
+	}
+	resolved, err := filepath.EvalSymlinks(target)
+	if err != nil {
+		t.Fatalf("EvalSymlinks() = %v", err)
+	}
+
+	got := SandboxSettingsHint([]string{"--allow-tool=shell(grep:*)", "--add-dir=" + link}, nil)
+	want := `{"sandbox":{"userPolicy":{"filesystem":{"readonlyPaths":["` + resolved + `"]}}}}`
 	if got != want {
 		t.Errorf("SandboxSettingsHint() = %q, want %q", got, want)
 	}
-	if got := SandboxSettingsHint([]string{"--allow-all-tools"}); got != "" {
+	got = SandboxSettingsHint([]string{"--add-dir=" + link}, []string{filepath.Join(link, "nested")})
+	want = `{"sandbox":{"userPolicy":{"filesystem":{"readwritePaths":["` + resolved + `"]}}}}`
+	if got != want {
+		t.Errorf("SandboxSettingsHint() = %q, want %q", got, want)
+	}
+	if got := SandboxSettingsHint([]string{"--allow-all-tools"}, nil); got != "" {
 		t.Errorf("SandboxSettingsHint() = %q, want \"\"", got)
+	}
+}
+
+func TestSandboxSettingsHintKeepsUnresolvablePaths(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "gone")
+	got := SandboxSettingsHint([]string{"--add-dir=" + missing}, nil)
+	want := `{"sandbox":{"userPolicy":{"filesystem":{"readonlyPaths":["` + missing + `"]}}}}`
+	if got != want {
+		t.Errorf("SandboxSettingsHint() = %q, want %q", got, want)
 	}
 }
 

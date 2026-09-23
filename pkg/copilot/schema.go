@@ -72,6 +72,9 @@ type Usage struct {
 	// Recommendations lists the Copilot CLI options that would have allowed
 	// the denied tool calls, most specific first.
 	Recommendations []string `json:"recommendations,omitempty"`
+	// WritablePaths lists the recommended directories a denied tool call was
+	// going to write to, which need more than read access to be granted.
+	WritablePaths []string `json:"writable_paths,omitempty"`
 	// QuotaExceeded reports that the Copilot CLI stopped because the account
 	// ran out of quota, which leaves the evaluation unfinished.
 	QuotaExceeded bool `json:"quota_exceeded,omitempty"`
