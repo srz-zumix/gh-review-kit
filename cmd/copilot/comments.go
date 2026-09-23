@@ -231,7 +231,7 @@ Use --language to have the evaluation reason written in a specific language.`,
 	f.StringVar(&agent, "agent", "", "Copilot CLI custom agent to use for evaluation")
 	f.BoolVar(&allowAllTools, "allow-all-tools", false, "Allow the Copilot CLI to use any tool without approval during evaluation")
 	f.StringVar(&model, "model", "", "Copilot CLI model to use for evaluation (default: the Copilot CLI's default model)")
-	f.DurationVar(&evaluateTimeout, "evaluate-timeout", 15*time.Minute, "Timeout for a single Copilot CLI evaluation")
+	f.DurationVar(&evaluateTimeout, "evaluate-timeout", 15*time.Minute, "Timeout for a single Copilot CLI evaluation, per comment (a batch run is given this much for every comment it covers)")
 	f.BoolVar(&sandbox, "sandbox", false, "Enable the Copilot CLI's OS-level shell sandbox for the evaluation (also passes --experimental and --add-dir for the current directory)")
 	f.StringVar(&sessionID, "session-id", "", "Copilot CLI session to resume (default: a new session)")
 	f.BoolVar(&rubberDuck, "rubber-duck", false, "Ask the Copilot CLI's built-in rubber duck agent for a second opinion before deciding")

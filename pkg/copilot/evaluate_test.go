@@ -317,6 +317,25 @@ func TestEvaluateBatchParsesResultDespiteNonZeroExit(t *testing.T) {
 	}
 }
 
+func TestEvaluateBatchReportsRunErrorWhenNoVerdictMatches(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fakeCopilotBin requires a POSIX shell")
+	}
+	// A transcript that was killed before printing its verdicts still holds
+	// JSON arrays from the files and commands the CLI looked at.
+	output := "grep -n 'files\\[\\]' src && echo []\nYou have been killed"
+	opts := EvaluateOptions{Bin: fakeCopilotBin(t, output, 137), Prompt: "judge"}
+	comments := []*Comment{{CommentID: 1, URL: "https://example.com/1"}}
+
+	_, _, err := EvaluateBatch(context.Background(), opts, "owner/repo", 1, comments)
+	if err == nil {
+		t.Fatal("EvaluateBatch() error = nil, want the run error when no verdict covers the comments")
+	}
+	if !strings.Contains(err.Error(), "failed to run copilot CLI") {
+		t.Errorf("EvaluateBatch() error = %v, want it to report the run failure", err)
+	}
+}
+
 func TestEvaluateReportsRunErrorWhenOutputIsUnparseable(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("fakeCopilotBin requires a POSIX shell")

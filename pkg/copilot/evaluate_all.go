@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/cli/go-gh/v2/pkg/repository"
 	"github.com/srz-zumix/go-gh-extension/pkg/gh"
@@ -113,8 +114,9 @@ func appendUnique(dst []string, values []string) []string {
 
 // evaluateAllBatch runs a single Copilot CLI invocation covering every comment.
 func evaluateAllBatch(ctx context.Context, opts EvaluateOptions, repoSlug string, prNumber int, comments []*Comment) ([]*EvaluationResult, *Usage) {
+	opts.Timeout = batchTimeout(opts.Timeout, len(comments))
 	if opts.Log != nil {
-		fmt.Fprintf(opts.Log, "\n--- evaluating %d comments in a single batch ---\n", len(comments))
+		fmt.Fprintf(opts.Log, "\n--- evaluating %d comments in a single batch (timeout %s) ---\n", len(comments), opts.Timeout)
 	}
 	evals, usage, err := EvaluateBatch(ctx, opts, repoSlug, prNumber, comments)
 	if err != nil {
@@ -125,6 +127,16 @@ func evaluateAllBatch(ctx context.Context, opts EvaluateOptions, repoSlug string
 		return withDenials(results, usage), usage
 	}
 	return withDenials(assignBatchResults(comments, evals), usage), usage
+}
+
+// batchTimeout scales a per-comment timeout to the single invocation that
+// covers every comment, so a batch gets as long as the same comments would get
+// one at a time.
+func batchTimeout(timeout time.Duration, comments int) time.Duration {
+	if timeout <= 0 || comments <= 1 {
+		return timeout
+	}
+	return timeout * time.Duration(comments)
 }
 
 // withDenials copies usage's Denials onto every result, since they all share

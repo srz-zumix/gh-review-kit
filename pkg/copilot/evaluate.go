@@ -125,6 +125,11 @@ func EvaluateBatch(ctx context.Context, opts EvaluateOptions, repoSlug string, p
 	// The Copilot CLI can be killed (e.g. by Timeout) after it already printed
 	// its verdicts, so a parseable result takes priority over a non-zero exit.
 	evals, parseErr := parseBatchEvaluation(output)
+	if parseErr == nil && evaluatedCount(evals, comments) == 0 {
+		// A JSON array can appear anywhere in the CLI transcript, so one
+		// covering none of the comments is not the verdict list.
+		parseErr = fmt.Errorf("no JSON array of verdicts found in output")
+	}
 	if parseErr != nil {
 		if runErr != nil {
 			return nil, usage, fmt.Errorf("failed to run copilot CLI for batch evaluation: %w: %s", runErr, lastLines(output, 3))
@@ -132,6 +137,17 @@ func EvaluateBatch(ctx context.Context, opts EvaluateOptions, repoSlug string, p
 		return nil, usage, fmt.Errorf("failed to parse copilot CLI batch output: %w: %s", parseErr, lastLines(output, 3))
 	}
 	return evals, usage, nil
+}
+
+// evaluatedCount returns how many of comments evals holds a verdict for.
+func evaluatedCount(evals map[int64]*Evaluation, comments []*Comment) int {
+	n := 0
+	for _, c := range comments {
+		if _, ok := evals[c.CommentID]; ok {
+			n++
+		}
+	}
+	return n
 }
 
 // runCopilotCLI invokes the Copilot CLI with prompt and opts, returning its

@@ -2,7 +2,28 @@ package copilot
 
 import (
 	"testing"
+	"time"
 )
+
+func TestBatchTimeout(t *testing.T) {
+	tests := []struct {
+		name     string
+		timeout  time.Duration
+		comments int
+		want     time.Duration
+	}{
+		{name: "scales with the comment count", timeout: 15 * time.Minute, comments: 4, want: time.Hour},
+		{name: "a single comment keeps the timeout", timeout: 15 * time.Minute, comments: 1, want: 15 * time.Minute},
+		{name: "no timeout stays unbounded", comments: 4},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := batchTimeout(tt.timeout, tt.comments); got != tt.want {
+				t.Errorf("batchTimeout() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
 
 func TestAssignBatchResults(t *testing.T) {
 	comments := []*Comment{
