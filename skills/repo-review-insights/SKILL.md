@@ -1,6 +1,6 @@
 ---
 name: repo-review-insights
-description: End-to-end workflow that profiles a GitHub repository's review culture and code-quality concerns by combining `gh review-kit comments` with the standard `gh` CLI (`gh pr view`, `gh pr list`, `gh api`, `gh issue list`). Invoking this skill runs the full pipeline (estimate → extract → validate → stats → suggest-rules → report) against a target repo and produces a finished Markdown deliverable. Also handles follow-up instructions such as "summarize review viewpoints", "profile reviewer @alice", "compare two periods", or "focus on path X".
+description: End-to-end workflow that profiles a GitHub repository's review culture and code-quality concerns by combining `gh review-kit insights` with the standard `gh` CLI (`gh pr view`, `gh pr list`, `gh api`, `gh issue list`). Invoking this skill runs the full pipeline (estimate → extract → validate → stats → suggest-rules → report) against a target repo and produces a finished Markdown deliverable. Also handles follow-up instructions such as "summarize review viewpoints", "profile reviewer @alice", "compare two periods", or "focus on path X".
 ---
 
 # repo-review-insights
@@ -63,7 +63,7 @@ If `gh repo view` fails, stop and surface the error to the user.
 ### Step 2. Preflight the API budget
 
 ```bash
-gh review-kit comments estimate \
+gh review-kit insights estimate \
   --repo {{owner/repo}} --merged --since {{since}} \
   --format json > ./.review-insights/{{owner__repo}}/estimate.json
 ```
@@ -78,7 +78,7 @@ State the chosen budget plan in one sentence before continuing.
 ### Step 3. Extract the dataset
 
 ```bash
-gh review-kit comments extract \
+gh review-kit insights extract \
   --repo {{owner/repo}} \
   --dataset ./.review-insights/{{owner__repo}} \
   --merged --since {{since}}
@@ -89,7 +89,7 @@ If the extract is interrupted, re-run the same command (it resumes from `checkpo
 ### Step 4. Validate
 
 ```bash
-gh review-kit comments validate \
+gh review-kit insights validate \
   --dataset ./.review-insights/{{owner__repo}} --strict \
   --format json > ./.review-insights/{{owner__repo}}/validation.json
 ```
@@ -101,16 +101,16 @@ If validation fails, fix-forward by re-running `extract --update` once. If it st
 Run all four in parallel; they are read-only:
 
 ```bash
-gh review-kit comments stats --dataset ./.review-insights/{{owner__repo}} \
+gh review-kit insights stats --dataset ./.review-insights/{{owner__repo}} \
   --group-by review_state --format json > ./.review-insights/{{owner__repo}}/stats-state.json
 
-gh review-kit comments stats --dataset ./.review-insights/{{owner__repo}} \
+gh review-kit insights stats --dataset ./.review-insights/{{owner__repo}} \
   --group-by author --top 20 --format json > ./.review-insights/{{owner__repo}}/stats-author.json
 
-gh review-kit comments stats --dataset ./.review-insights/{{owner__repo}} \
+gh review-kit insights stats --dataset ./.review-insights/{{owner__repo}} \
   --group-by path_prefix --top 30 --format json > ./.review-insights/{{owner__repo}}/stats-path.json
 
-gh review-kit comments stats --dataset ./.review-insights/{{owner__repo}} \
+gh review-kit insights stats --dataset ./.review-insights/{{owner__repo}} \
   --group-by label --top 20 --format json > ./.review-insights/{{owner__repo}}/stats-label.json
 ```
 
@@ -118,18 +118,18 @@ gh review-kit comments stats --dataset ./.review-insights/{{owner__repo}} \
 
 ```bash
 # Blocking review feedback evidence, grouped by path prefix
-gh review-kit comments sample \
+gh review-kit insights sample \
   --dataset ./.review-insights/{{owner__repo}} \
   --strategy blocking --group-by path_prefix --per-group 5 \
   --output ./.review-insights/{{owner__repo}}/evidence-blocking.jsonl
 
 # Ranked candidate review viewpoints / coding rules
-gh review-kit comments suggest-rules \
+gh review-kit insights suggest-rules \
   --dataset ./.review-insights/{{owner__repo}} \
   --review-states CHANGES_REQUESTED --min-reviewers 2 \
   --format json --output ./.review-insights/{{owner__repo}}/candidates.json
 
-gh review-kit comments suggest-rules \
+gh review-kit insights suggest-rules \
   --dataset ./.review-insights/{{owner__repo}} \
   --review-states CHANGES_REQUESTED --min-reviewers 2 \
   --format markdown --output ./.review-insights/{{owner__repo}}/candidates.md
@@ -149,7 +149,7 @@ Save each as `./.review-insights/{{owner__repo}}/pr-{{number}}.json`. If a PR ca
 ### Step 8. Generate the deliverable
 
 ```bash
-gh review-kit comments report \
+gh review-kit insights report \
   --dataset ./.review-insights/{{owner__repo}} \
   --review-states CHANGES_REQUESTED \
   --output ./.review-insights/{{owner__repo}}/report.md
@@ -175,7 +175,7 @@ After the initial pipeline, the dataset directory is reusable. Map common follow
 ### "Summarize review viewpoints" / "What do reviewers care about?"
 
 ```bash
-gh review-kit comments suggest-rules \
+gh review-kit insights suggest-rules \
   --dataset ./.review-insights/{{owner__repo}} \
   --review-states CHANGES_REQUESTED --min-reviewers 2 \
   --format markdown --output ./.review-insights/{{owner__repo}}/viewpoints.md
@@ -186,15 +186,15 @@ Then rewrite the Markdown into "Must / Should / Consider" buckets, each item wit
 ### "Profile reviewer @alice" / "What are @alice's review tendencies?"
 
 ```bash
-gh review-kit comments stats  --dataset ./.review-insights/{{owner__repo}} \
+gh review-kit insights stats  --dataset ./.review-insights/{{owner__repo}} \
   --group-by review_state --format json
-gh review-kit comments sample --dataset ./.review-insights/{{owner__repo}} \
+gh review-kit insights sample --dataset ./.review-insights/{{owner__repo}} \
   --authors alice --per-group 10 --strategy recent \
   --output ./.review-insights/{{owner__repo}}/alice-recent.jsonl
-gh review-kit comments sample --dataset ./.review-insights/{{owner__repo}} \
+gh review-kit insights sample --dataset ./.review-insights/{{owner__repo}} \
   --authors alice --review-states CHANGES_REQUESTED --per-group 10 --strategy blocking \
   --output ./.review-insights/{{owner__repo}}/alice-blocking.jsonl
-gh review-kit comments suggest-rules --dataset ./.review-insights/{{owner__repo}} \
+gh review-kit insights suggest-rules --dataset ./.review-insights/{{owner__repo}} \
   --review-states CHANGES_REQUESTED --min-reviewers 1 --format json \
   --output ./.review-insights/{{owner__repo}}/alice-candidates.json
 ```
@@ -210,14 +210,14 @@ Run `extract` twice into separate dataset directories with disjoint `--since` / 
 ### "Focus on path `internal/` (or any prefix)"
 
 ```bash
-gh review-kit comments stats   --dataset ./.review-insights/{{owner__repo}} \
+gh review-kit insights stats   --dataset ./.review-insights/{{owner__repo}} \
   --group-by author --top 20 --format json   # whole repo for context
 
-gh review-kit comments suggest-rules --dataset ./.review-insights/{{owner__repo}} \
+gh review-kit insights suggest-rules --dataset ./.review-insights/{{owner__repo}} \
   --path internal/ --review-states CHANGES_REQUESTED --min-reviewers 2 \
   --format markdown --output ./.review-insights/{{owner__repo}}/internal-rules.md
 
-gh review-kit comments sample --dataset ./.review-insights/{{owner__repo}} \
+gh review-kit insights sample --dataset ./.review-insights/{{owner__repo}} \
   --path internal/ --review-states CHANGES_REQUESTED \
   --group-by author --per-group 5 --strategy blocking \
   --output ./.review-insights/{{owner__repo}}/internal-evidence.jsonl
@@ -227,7 +227,7 @@ gh review-kit comments sample --dataset ./.review-insights/{{owner__repo}} \
 
 ```bash
 gh pr view 123 --repo {{owner/repo}} --json number,title,author,reviews,reviewRequests,files,labels
-gh review-kit comments sample --dataset ./.review-insights/{{owner__repo}} \
+gh review-kit insights sample --dataset ./.review-insights/{{owner__repo}} \
   --per-group 100 --group-by review_state --format json \
   | jq '[.[] | select(.pr_number==123)]'
 ```
@@ -237,7 +237,7 @@ Combine the diff/files info from `gh pr view` with the per-PR comment slice to n
 ### "Refresh / re-run with the latest data"
 
 ```bash
-gh review-kit comments extract --repo {{owner/repo}} \
+gh review-kit insights extract --repo {{owner/repo}} \
   --dataset ./.review-insights/{{owner__repo}} --update
 ```
 
@@ -340,6 +340,6 @@ Output Markdown:
 
 ## References
 
-- Companion skill: `gh-review-kit-comments` (full reference for the `comments` subcommands)
+- Companion skill: `gh-review-kit-insights` (full reference for the `insights` subcommands)
 - Companion skill: `gh-review-kit` (`checks`, `rerequest`)
 - gh CLI manual: <https://cli.github.com/manual/>

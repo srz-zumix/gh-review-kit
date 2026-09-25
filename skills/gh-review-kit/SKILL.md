@@ -282,12 +282,12 @@ gh review-kit checks failure 123 --repo owner/repo
 gh review-kit checks ff 123
 ```
 
-## Estimate API Work (comments estimate)
+## Estimate API Work (insights estimate)
 
 Preflight a future `comments extract`. Lists matching PRs, samples a few for averages, and reports projected total comments, projected API calls, and current rate-limit headroom. Use it before large runs to avoid hitting secondary rate limits.
 
 ```bash
-gh review-kit comments estimate [flags]
+gh review-kit insights estimate [flags]
 ```
 
 ### Options
@@ -309,16 +309,16 @@ gh review-kit comments estimate [flags]
 
 ```bash
 # Quick estimate for the current repository
-gh review-kit comments estimate
+gh review-kit insights estimate
 
 # Estimate a merged-only corpus with a larger sample for accuracy
-gh review-kit comments estimate --repo owner/repo --merged --sample-size 20
+gh review-kit insights estimate --repo owner/repo --merged --sample-size 20
 
 # JSON for downstream tooling
-gh review-kit comments estimate --repo owner/repo --format json
+gh review-kit insights estimate --repo owner/repo --format json
 ```
 
-## Extract PR Review Feedback (comments extract)
+## Extract PR Review Feedback (insights extract)
 
 Extract pull request review feedback (review bodies, inline review comments, and PR issue comments) into a normalized JSONL dataset directory. Subsequent commands operate on this directory.
 
@@ -332,7 +332,7 @@ The dataset directory contains:
 Re-running with the same `--dataset` resumes from the checkpoint. Pass `--update` to re-fetch PRs whose `updated_at` advanced; their existing records are atomically replaced. Conservative secret/token redaction is applied by default; pass `--no-redact` to opt out.
 
 ```bash
-gh review-kit comments extract --dataset DIR [flags]
+gh review-kit insights extract --dataset DIR [flags]
 ```
 
 ### Options
@@ -358,29 +358,29 @@ gh review-kit comments extract --dataset DIR [flags]
 
 ```bash
 # Extract all PR review feedback for a repository into ./dataset
-gh review-kit comments extract --repo owner/repo --dataset ./dataset
+gh review-kit insights extract --repo owner/repo --dataset ./dataset
 
 # Resume an interrupted extraction (same --dataset)
-gh review-kit comments extract --repo owner/repo --dataset ./dataset
+gh review-kit insights extract --repo owner/repo --dataset ./dataset
 
 # Refresh PRs whose updated_at advanced since the last run
-gh review-kit comments extract --repo owner/repo --dataset ./dataset --update
+gh review-kit insights extract --repo owner/repo --dataset ./dataset --update
 
 # Only merged PRs updated since 2024-01-01, excluding bots
-gh review-kit comments extract --repo owner/repo --dataset ./dataset \
+gh review-kit insights extract --repo owner/repo --dataset ./dataset \
   --merged --since 2024-01-01T00:00:00Z
 
 # Only inline review comments under src/ with at least 20 bytes of body
-gh review-kit comments extract --repo owner/repo --dataset ./dataset \
+gh review-kit insights extract --repo owner/repo --dataset ./dataset \
   --comment-types review_comment --path src/ --min-length 20
 ```
 
-## Validate a Comments Dataset (comments validate)
+## Validate a Comments Dataset (insights validate)
 
 Validate the schema and integrity of a comments dataset directory.
 
 ```bash
-gh review-kit comments validate --dataset DIR [flags]
+gh review-kit insights validate --dataset DIR [flags]
 ```
 
 ### Options
@@ -395,21 +395,21 @@ gh review-kit comments validate --dataset DIR [flags]
 
 ```bash
 # Print a human-readable validation report
-gh review-kit comments validate --dataset ./dataset
+gh review-kit insights validate --dataset ./dataset
 
 # Fail with a non-zero exit code on any issue
-gh review-kit comments validate --dataset ./dataset --strict
+gh review-kit insights validate --dataset ./dataset --strict
 
 # Emit JSON for downstream tooling
-gh review-kit comments validate --dataset ./dataset --format json
+gh review-kit insights validate --dataset ./dataset --format json
 ```
 
-## Aggregate a Comments Dataset (comments stats)
+## Aggregate a Comments Dataset (insights stats)
 
 Aggregate counts over a comments dataset and rank rows by frequency. Useful before LLM/Agent analysis to pick high-value slices.
 
 ```bash
-gh review-kit comments stats --dataset DIR [flags]
+gh review-kit insights stats --dataset DIR [flags]
 ```
 
 ### Options
@@ -426,21 +426,21 @@ gh review-kit comments stats --dataset DIR [flags]
 
 ```bash
 # Count records by type
-gh review-kit comments stats --dataset ./dataset
+gh review-kit insights stats --dataset ./dataset
 
 # Top 20 reviewers by comment volume
-gh review-kit comments stats --dataset ./dataset --group-by author --top 20
+gh review-kit insights stats --dataset ./dataset --group-by author --top 20
 
 # Top path prefixes among inline comments, JSON output
-gh review-kit comments stats --dataset ./dataset --group-by path_prefix --top 30 --format json
+gh review-kit insights stats --dataset ./dataset --group-by path_prefix --top 30 --format json
 ```
 
-## Pick Representative Comments (comments sample)
+## Pick Representative Comments (insights sample)
 
 Pick representative comments from a comments dataset. Filters narrow the corpus, records are grouped by `--group-by`, and `--strategy` decides which `--per-group` records are kept per group.
 
 ```bash
-gh review-kit comments sample --dataset DIR [flags]
+gh review-kit insights sample --dataset DIR [flags]
 ```
 
 ### Options
@@ -469,26 +469,26 @@ gh review-kit comments sample --dataset DIR [flags]
 
 ```bash
 # 5 most recent comments overall
-gh review-kit comments sample --dataset ./dataset
+gh review-kit insights sample --dataset ./dataset
 
 # 3 representative comments per author, JSONL to stdout
-gh review-kit comments sample --dataset ./dataset --group-by author --per-group 3
+gh review-kit insights sample --dataset ./dataset --group-by author --per-group 3
 
 # Only blocking review feedback (CHANGES_REQUESTED), 10 per repo
-gh review-kit comments sample --dataset ./dataset \
+gh review-kit insights sample --dataset ./dataset \
   --group-by repo --per-group 10 --strategy blocking
 
 # Deterministic random sample written to a file
-gh review-kit comments sample --dataset ./dataset \
+gh review-kit insights sample --dataset ./dataset \
   --strategy random --seed 42 --per-group 50 --output ./samples.jsonl
 ```
 
-## Split a Dataset into Bundles (comments bundle)
+## Split a Dataset into Bundles (insights bundle)
 
 Split a comments dataset into smaller JSONL bundles for parallel LLM/Agent analysis. At least one of `--max-records` or `--max-bytes` must be set. A `manifest.json` next to the bundles records each file's group, record count, and byte size.
 
 ```bash
-gh review-kit comments bundle --dataset DIR --output-dir DIR [flags]
+gh review-kit insights bundle --dataset DIR --output-dir DIR [flags]
 ```
 
 ### Options
@@ -514,23 +514,23 @@ gh review-kit comments bundle --dataset DIR --output-dir DIR [flags]
 
 ```bash
 # 1000 records per bundle, single stream
-gh review-kit comments bundle --dataset ./dataset --output-dir ./bundles --max-records 1000
+gh review-kit insights bundle --dataset ./dataset --output-dir ./bundles --max-records 1000
 
 # 500KB per bundle, grouped by repo so each Agent sees one repo at a time
-gh review-kit comments bundle --dataset ./dataset --output-dir ./bundles \
+gh review-kit insights bundle --dataset ./dataset --output-dir ./bundles \
   --max-bytes 500000 --group-by repo
 
 # Only blocking review feedback, grouped by path prefix
-gh review-kit comments bundle --dataset ./dataset --output-dir ./bundles \
+gh review-kit insights bundle --dataset ./dataset --output-dir ./bundles \
   --max-records 200 --group-by path_prefix --review-states CHANGES_REQUESTED
 ```
 
-## Rank Candidate Rules (comments suggest-rules)
+## Rank Candidate Rules (insights suggest-rules)
 
 Rank deterministic candidate coding rules and review viewpoints. Topic detection is regex/keyword based, with built-in defaults and an optional JSON dictionary via `--topics-file`. Each candidate carries frequency, distinct reviewer/repo counts, blocking share, and evidence URLs.
 
 ```bash
-gh review-kit comments suggest-rules --dataset DIR [flags]
+gh review-kit insights suggest-rules --dataset DIR [flags]
 ```
 
 ### Options
@@ -556,23 +556,23 @@ gh review-kit comments suggest-rules --dataset DIR [flags]
 
 ```bash
 # Rank candidates with the built-in dictionary
-gh review-kit comments suggest-rules --dataset ./dataset
+gh review-kit insights suggest-rules --dataset ./dataset
 
 # Use a custom topics file and emit JSON
-gh review-kit comments suggest-rules --dataset ./dataset \
+gh review-kit insights suggest-rules --dataset ./dataset \
   --topics-file ./topics.json --format json --output ./candidates.json
 
 # Only blocking review comments, require 3 distinct reviewers
-gh review-kit comments suggest-rules --dataset ./dataset \
+gh review-kit insights suggest-rules --dataset ./dataset \
   --review-states CHANGES_REQUESTED --min-reviewers 3
 ```
 
-## Generate a Report (comments report)
+## Generate a Report (insights report)
 
 Generate a deterministic Markdown or JSON report combining aggregate stats and rule candidates with the dataset manifest summary.
 
 ```bash
-gh review-kit comments report --dataset DIR [flags]
+gh review-kit insights report --dataset DIR [flags]
 ```
 
 ### Options
@@ -599,14 +599,14 @@ gh review-kit comments report --dataset DIR [flags]
 
 ```bash
 # Markdown report to stdout
-gh review-kit comments report --dataset ./dataset
+gh review-kit insights report --dataset ./dataset
 
 # Save Markdown and JSON reports
-gh review-kit comments report --dataset ./dataset --output ./report.md
-gh review-kit comments report --dataset ./dataset --format json --output ./report.json
+gh review-kit insights report --dataset ./dataset --output ./report.md
+gh review-kit insights report --dataset ./dataset --format json --output ./report.json
 
 # Focus on blocking review feedback from the last 6 months
-gh review-kit comments report --dataset ./dataset \
+gh review-kit insights report --dataset ./dataset \
   --review-states CHANGES_REQUESTED --since 2025-10-01T00:00:00Z
 ```
 
@@ -878,19 +878,19 @@ gh review-kit rerequest
 gh review-kit rerequest 123
 
 # 4. Extract small evidence sets for an Agent
-gh review-kit comments sample --dataset ./review-corpus \
+gh review-kit insights sample --dataset ./review-corpus \
   --group-by path_prefix --per-group 5 --strategy blocking --output ./evidence.jsonl
 
 # 5. Split the corpus into Agent-sized bundles for parallel analysis
-gh review-kit comments bundle --dataset ./review-corpus --output-dir ./bundles \
+gh review-kit insights bundle --dataset ./review-corpus --output-dir ./bundles \
   --max-records 1000 --group-by repo
 
 # 6. Rank candidate coding rules / review viewpoints
-gh review-kit comments suggest-rules --dataset ./review-corpus \
+gh review-kit insights suggest-rules --dataset ./review-corpus \
   --review-states CHANGES_REQUESTED --min-reviewers 3 --format json --output ./candidates.json
 
 # 7. Produce a Markdown report for human review
-gh review-kit comments report --dataset ./review-corpus --output ./review-report.md
+gh review-kit insights report --dataset ./review-corpus --output ./review-report.md
 
 # Re-request review by PR URL
 gh review-kit rerequest https://github.com/owner/repo/pull/123
@@ -1035,18 +1035,18 @@ Build a reproducible dataset of historical review feedback, then summarize it be
 
 ```bash
 # 0. Preflight: estimate API work and rate-limit headroom
-gh review-kit comments estimate --repo owner/repo --merged
+gh review-kit insights estimate --repo owner/repo --merged
 
 # 1. Extract review feedback into a dataset directory
-gh review-kit comments extract --repo owner/repo --dataset ./review-corpus
+gh review-kit insights extract --repo owner/repo --dataset ./review-corpus
 
 # 2. Validate the dataset before analysis
-gh review-kit comments validate --dataset ./review-corpus --strict
+gh review-kit insights validate --dataset ./review-corpus --strict
 
 # 3. Pick high-value slices instead of reading every record
-gh review-kit comments stats --dataset ./review-corpus --group-by review_state
-gh review-kit comments stats --dataset ./review-corpus --group-by author --top 20
-gh review-kit comments stats --dataset ./review-corpus --group-by path_prefix --top 30 --format json
+gh review-kit insights stats --dataset ./review-corpus --group-by review_state
+gh review-kit insights stats --dataset ./review-corpus --group-by author --top 20
+gh review-kit insights stats --dataset ./review-corpus --group-by path_prefix --top 30 --format json
 ```
 
 ## References
