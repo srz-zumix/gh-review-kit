@@ -284,7 +284,7 @@ gh review-kit checks ff 123
 
 ## Estimate API Work (insights estimate)
 
-Preflight a future `comments extract`. Lists matching PRs, samples a few for averages, and reports projected total comments, projected API calls, and current rate-limit headroom. Use it before large runs to avoid hitting secondary rate limits.
+Preflight a future `insights extract`. Lists matching PRs, samples a few for averages, and reports projected total comments, projected API calls, and current rate-limit headroom. Use it before large runs to avoid hitting secondary rate limits.
 
 ```bash
 gh review-kit insights estimate [flags]
