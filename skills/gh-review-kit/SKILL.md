@@ -36,7 +36,7 @@ gh review-kit                       # Root command
 ├── checks                          # Manage check runs for a pull request
 │   ├── list                        # List check runs for a pull request
 │   └── failure                     # Display logs for failed check runs
-├── comments                        # Build and analyze datasets of PR review feedback
+├── insights                        # Build and analyze datasets of PR review feedback
 │   ├── estimate                    # Preflight extract: PR count, comment volume, API budget
 │   ├── extract                     # Extract PR review feedback into a dataset
 │   ├── validate                    # Validate a comments dataset
