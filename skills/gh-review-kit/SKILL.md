@@ -300,7 +300,7 @@ gh review-kit comments list [pull-request-identifier] [flags]
 | --- | --- |
 | `--color` | Color output: always, never, auto (default: auto) |
 | `--comment-types` | Comment types to include, repeatable (default: all). Allowed: `review_body`, `review_comment`, `issue_comment` |
-| `--format` | Output format: `text`, `json` (default: `text`) |
+| `--format` | Output format: `json` (omit for text output) |
 | `--include-bots` | Include comments authored by bot users (default: false) |
 | `--min-length` | Skip comments whose trimmed body is shorter than this many bytes (default: 0) |
 | `--no-redact` | Disable conservative secret/token redaction (default: false) |
@@ -864,7 +864,7 @@ gh review-kit copilot status [pull-request-number] [flags]
 
 | Flag | Description |
 | --- | --- |
-| `--format` | Output format: `text`, `json` (default: `text`) |
+| `--format` | Output format: `json` (omit for text output) |
 | `--repo, -R` | Repository in the format 'owner/repo' (default: current repository) |
 
 ### Examples

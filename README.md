@@ -273,7 +273,7 @@ gh review-kit checks failure 123 --repo owner-name/repo-name
 #### List review feedback on a pull request
 
 ```sh
-gh review-kit comments list [pull-request-identifier] [--repo REPO] [--comment-types TYPES] [--include-bots] [--min-length N] [--path PREFIX] [--no-redact] [--color COLOR] [--format FORMAT]
+gh review-kit comments list [pull-request-identifier] [--repo REPO] [--comment-types TYPES] [--include-bots] [--min-length N] [--path PREFIX] [--no-redact] [--color COLOR] [--format json]
 ```
 
 List every kind of review feedback on a pull request: review bodies, inline review comments, and PR issue comments, merged into a single list ordered by creation time.
@@ -291,7 +291,7 @@ The pull request can be specified by:
 
 - `--color`: Color output: always, never, auto (optional, default: auto)
 - `--comment-types`: Comment types to include, repeatable (optional, default: all). Allowed: `review_body`, `review_comment`, `issue_comment`
-- `--format`: Output format: `text`, `json` (optional, default: `text`)
+- `--format`: Output format: `json` (optional; omit for text output)
 - `--include-bots`: Include comments authored by bot users (optional, default: false)
 - `--min-length`: Skip comments whose trimmed body is shorter than this many bytes (optional, default: 0)
 - `--no-redact`: Disable conservative secret/token redaction (optional, default: false)
@@ -536,7 +536,7 @@ A pending review request takes precedence, so a pull request that Copilot has al
 
 **Options:**
 
-- `--format`: Output format: `text`, `json` (optional, default: `text`)
+- `--format`: Output format: `json` (optional; omit for text output)
 - `--repo, -R`: Repository in the format 'owner/repo' (optional, defaults to current repository)
 
 **Examples:**
