@@ -1,6 +1,6 @@
 ---
 name: gh-review-kit
-description: GitHub CLI extension (gh review-kit) for managing GitHub pull request reviews — including listing check runs with advanced filtering, displaying logs for failed checks, re-requesting reviews, building/analyzing normalized datasets of PR review feedback for large-scale review-comment mining, embedding Git provenance metadata into video files, and judging/acting on GitHub Copilot code review comments.
+description: GitHub CLI extension (gh review-kit) for managing GitHub pull request reviews — including listing check runs with advanced filtering, displaying logs for failed checks, listing all review feedback (review bodies, inline review comments, and issue comments) on a pull request, re-requesting reviews, building/analyzing normalized datasets of PR review feedback for large-scale review-comment mining, embedding Git provenance metadata into video files, and judging/acting on GitHub Copilot code review comments.
 ---
 
 # gh-review-kit
@@ -36,6 +36,8 @@ gh review-kit                       # Root command
 ├── checks                          # Manage check runs for a pull request
 │   ├── list                        # List check runs for a pull request
 │   └── failure                     # Display logs for failed check runs
+├── comments                        # List review feedback on a pull request
+│   └── list                        # List review bodies, inline review comments, and issue comments
 ├── insights                        # Build and analyze datasets of PR review feedback
 │   ├── estimate                    # Preflight extract: PR count, comment volume, API budget
 │   ├── extract                     # Extract PR review feedback into a dataset
@@ -280,6 +282,48 @@ gh review-kit checks failure 123 --repo owner/repo
 
 # Using alias
 gh review-kit checks ff 123
+```
+
+## List Review Feedback (comments list)
+
+List every kind of review feedback on a pull request: review bodies, inline review comments, and PR issue comments, merged into a single list ordered by creation time.
+
+`gh pr view --comments` only returns issue comments, so it misses feedback left as review bodies or inline review comments; this command fills that gap.
+
+```bash
+gh review-kit comments list [pull-request-identifier] [flags]
+```
+
+### Options
+
+| Flag | Description |
+| --- | --- |
+| `--color` | Color output: always, never, auto (default: auto) |
+| `--comment-types` | Comment types to include, repeatable (default: all). Allowed: `review_body`, `review_comment`, `issue_comment` |
+| `--format` | Output format: `json` (omit for text output) |
+| `--include-bots` | Include comments authored by bot users (default: false) |
+| `--min-length` | Skip comments whose trimmed body is shorter than this many bytes (default: 0) |
+| `--no-redact` | Disable conservative secret/token redaction (default: false) |
+| `--path` | Restrict inline review comments to these path prefixes, repeatable |
+| `--repo, -R` | Repository in the format 'owner/repo' (default: current repository) |
+
+### Examples
+
+```bash
+# List review feedback for current branch
+gh review-kit comments list
+
+# List review feedback by PR number
+gh review-kit comments list 123
+
+# List only inline review comments
+gh review-kit comments list 123 --comment-types review_comment
+
+# Include comments from bot reviewers such as Copilot
+gh review-kit comments list 123 --include-bots
+
+# JSON for downstream tooling
+gh review-kit comments list 123 --format json
 ```
 
 ## Estimate API Work (insights estimate)
@@ -820,7 +864,7 @@ gh review-kit copilot status [pull-request-number] [flags]
 
 | Flag | Description |
 | --- | --- |
-| `--format` | Output format: `text`, `json` (default: `text`) |
+| `--format` | Output format: `json` (omit for text output) |
 | `--repo, -R` | Repository in the format 'owner/repo' (default: current repository) |
 
 ### Examples

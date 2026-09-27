@@ -268,6 +268,61 @@ gh review-kit checks failure 123 --no-required
 gh review-kit checks failure 123 --repo owner-name/repo-name
 ```
 
+### comments
+
+#### List review feedback on a pull request
+
+```sh
+gh review-kit comments list [pull-request-identifier] [--repo REPO] [--comment-types TYPES] [--include-bots] [--min-length N] [--path PREFIX] [--no-redact] [--color COLOR] [--format json]
+```
+
+List every kind of review feedback on a pull request: review bodies, inline review comments, and PR issue comments, merged into a single list ordered by creation time.
+
+`gh pr view --comments` only returns issue comments, so it misses feedback left as review bodies or inline review comments; this command fills that gap.
+
+The pull request can be specified by:
+
+- PR number (e.g., `123` or `#123`)
+- PR URL (e.g., `https://github.com/owner/repo/pull/123`)
+- Branch name (e.g., `feature/my-branch`)
+- If omitted, uses the current branch
+
+**Options:**
+
+- `--color`: Color output: always, never, auto (optional, default: auto)
+- `--comment-types`: Comment types to include, repeatable (optional, default: all). Allowed: `review_body`, `review_comment`, `issue_comment`
+- `--format`: Output format: `json` (optional; omit for text output)
+- `--include-bots`: Include comments authored by bot users (optional, default: false)
+- `--min-length`: Skip comments whose trimmed body is shorter than this many bytes (optional, default: 0)
+- `--no-redact`: Disable conservative secret/token redaction (optional, default: false)
+- `--path`: Restrict inline review comments to these path prefixes, repeatable (optional)
+- `--repo, -R`: Repository in the format 'owner/repo' (optional, defaults to current repository)
+
+**Examples:**
+
+```sh
+# List review feedback for current branch
+gh review-kit comments list
+
+# List review feedback by PR number
+gh review-kit comments list 123
+
+# List review feedback by PR URL
+gh review-kit comments list https://github.com/owner/repo/pull/123
+
+# List only inline review comments
+gh review-kit comments list 123 --comment-types review_comment
+
+# Include comments from bot reviewers such as Copilot
+gh review-kit comments list 123 --include-bots
+
+# Restrict inline review comments to a path prefix
+gh review-kit comments list 123 --path pkg/insights
+
+# JSON for downstream tooling
+gh review-kit comments list 123 --format json
+```
+
 ### copilot
 
 #### List Copilot code review comments on a pull request
@@ -481,7 +536,7 @@ A pending review request takes precedence, so a pull request that Copilot has al
 
 **Options:**
 
-- `--format`: Output format: `text`, `json` (optional, default: `text`)
+- `--format`: Output format: `json` (optional; omit for text output)
 - `--repo, -R`: Repository in the format 'owner/repo' (optional, defaults to current repository)
 
 **Examples:**

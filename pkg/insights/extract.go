@@ -128,6 +128,43 @@ func extractOnePR(ctx context.Context, client *gh.GitHubClient, ds *Dataset, rep
 	// API failure leaves no partial PR/comment records on disk. The next run
 	// will then re-process this PR cleanly because the checkpoint is updated
 	// only after a successful write.
+	comments, err := fetchPRComments(ctx, client, repo, pr, opts, commentTypes)
+	if err != nil {
+		return err
+	}
+
+	if err := ds.AppendPR(toPRRecord(repoKey, pr)); err != nil {
+		return err
+	}
+	for _, c := range comments {
+		if err := ds.AppendComment(c); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ListPRComments fetches and normalizes review feedback (review bodies, inline
+// review comments, and PR issue comments) for a single pull request, ordered
+// by creation time. Unlike Extract, it does not write to a dataset, which
+// makes it suitable for a one-off, live listing of everything on a PR (the
+// dataset-oriented CommentTypes/IncludeBots/MinLength/Paths/NoRedact fields of
+// opts still apply; the PR-selection fields such as State and Since do not).
+func ListPRComments(ctx context.Context, client *gh.GitHubClient, repo repository.Repository, pr *github.PullRequest, opts ExtractOptions) ([]*Comment, error) {
+	commentTypes := commentTypeSet(opts.CommentTypes)
+	comments, err := fetchPRComments(ctx, client, repo, pr, opts, commentTypes)
+	if err != nil {
+		return nil, err
+	}
+	slices.SortFunc(comments, func(a, b *Comment) int {
+		return a.CreatedAt.Compare(b.CreatedAt)
+	})
+	return comments, nil
+}
+
+func fetchPRComments(ctx context.Context, client *gh.GitHubClient, repo repository.Repository, pr *github.PullRequest, opts ExtractOptions, commentTypes map[CommentType]bool) ([]*Comment, error) {
+	repoKey := repo.Owner + "/" + repo.Name
+
 	var comments []*Comment
 
 	// Fetch reviews once when either review bodies or inline review comments are
@@ -139,7 +176,7 @@ func extractOnePR(ctx context.Context, client *gh.GitHubClient, ds *Dataset, rep
 	if commentTypes[CommentTypeReviewBody] || commentTypes[CommentTypeReviewComment] {
 		rv, err := gh.GetPullRequestReviews(ctx, client, repo, pr)
 		if err != nil {
-			return fmt.Errorf("failed to get reviews: %w", err)
+			return nil, fmt.Errorf("failed to get reviews: %w", err)
 		}
 		reviews = rv
 		for _, r := range reviews {
@@ -158,7 +195,7 @@ func extractOnePR(ctx context.Context, client *gh.GitHubClient, ds *Dataset, rep
 	if commentTypes[CommentTypeReviewComment] {
 		rc, err := gh.ListPullRequestReviewComments(ctx, client, repo, pr)
 		if err != nil {
-			return fmt.Errorf("failed to list review comments: %w", err)
+			return nil, fmt.Errorf("failed to list review comments: %w", err)
 		}
 		for _, c := range rc {
 			if rec := toReviewCommentRecord(repoKey, pr, c, reviewStates, opts); rec != nil {
@@ -170,7 +207,7 @@ func extractOnePR(ctx context.Context, client *gh.GitHubClient, ds *Dataset, rep
 	if commentTypes[CommentTypeIssueComment] {
 		issueComments, err := gh.ListIssueComments(ctx, client, repo, pr)
 		if err != nil {
-			return fmt.Errorf("failed to list issue comments: %w", err)
+			return nil, fmt.Errorf("failed to list issue comments: %w", err)
 		}
 		for _, c := range issueComments {
 			if rec := toIssueCommentRecord(repoKey, pr, c, opts); rec != nil {
@@ -179,15 +216,7 @@ func extractOnePR(ctx context.Context, client *gh.GitHubClient, ds *Dataset, rep
 		}
 	}
 
-	if err := ds.AppendPR(toPRRecord(repoKey, pr)); err != nil {
-		return err
-	}
-	for _, c := range comments {
-		if err := ds.AppendComment(c); err != nil {
-			return err
-		}
-	}
-	return nil
+	return comments, nil
 }
 
 func commentTypeSet(types []CommentType) map[CommentType]bool {
