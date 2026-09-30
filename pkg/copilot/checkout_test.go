@@ -135,3 +135,14 @@ func TestBranchMatches(t *testing.T) {
 		})
 	}
 }
+
+func TestCheckLocalCheckoutFailsOnBrokenRepository(t *testing.T) {
+	dir, _, second := initCheckoutRepo(t)
+	if err := os.WriteFile(dir+"/.git/config", []byte("[core\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := CheckLocalCheckout(context.Background(), testHead(second))
+	if err == nil {
+		t.Errorf("CheckLocalCheckout() = %+v, nil, want error for a broken repository", got)
+	}
+}

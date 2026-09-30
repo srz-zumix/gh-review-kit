@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"os"
 	"strings"
 
 	"github.com/cli/cli/v2/git"
@@ -37,7 +38,10 @@ func CheckLocalCheckout(ctx context.Context, head PRHead) (*LocalCheckout, error
 	c := gitutil.NewClient()
 
 	inside, err := isInsideWorkTree(ctx, c)
-	if err != nil || !inside {
+	if err != nil {
+		return nil, fmt.Errorf("failed to check whether the current directory is inside a git work tree: %w", err)
+	}
+	if !inside {
 		return nil, nil
 	}
 	remotes, err := c.Remotes(ctx)
@@ -96,17 +100,32 @@ func branchMatches(branch, mergeRef string, head PRHead) bool {
 	return false
 }
 
-// isInsideWorkTree reports whether the git client's directory is inside a git work tree.
+// isInsideWorkTree reports whether the git client's directory is inside a git
+// work tree. Only git's "not a git repository" failure is reported as outside;
+// any other failure is returned as an error so that the checkout check does not
+// silently pass.
 func isInsideWorkTree(ctx context.Context, c *git.Client) (bool, error) {
 	cmd, err := c.Command(ctx, "rev-parse", "--is-inside-work-tree")
 	if err != nil {
 		return false, err
 	}
+	// Force untranslated messages so that the "not a git repository" check works under any locale.
+	cmd.Env = append(os.Environ(), "LC_ALL=C")
 	out, err := cmd.Output()
 	if err != nil {
+		if isNotGitRepositoryError(err) {
+			return false, nil
+		}
 		return false, err
 	}
 	return strings.TrimSpace(string(out)) == "true", nil
+}
+
+// isNotGitRepositoryError reports whether err is git's fatal "not a git
+// repository" failure, which git exits with code 128 for.
+func isNotGitRepositoryError(err error) bool {
+	ge, ok := errors.AsType[*git.GitError](err)
+	return ok && ge.ExitCode == 128 && strings.Contains(strings.ToLower(ge.Stderr), "not a git repository")
 }
 
 // isAncestorOfHEAD reports whether sha is reachable from HEAD.
