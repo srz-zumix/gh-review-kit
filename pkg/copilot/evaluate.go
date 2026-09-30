@@ -52,6 +52,9 @@ type EvaluateOptions struct {
 	Sandbox bool
 	// Language, when set, instructs the Copilot CLI to respond in that language.
 	Language string
+	// LocalCheckout, when set, tells the Copilot CLI that the working directory
+	// is a verified checkout of the pull request's latest commit.
+	LocalCheckout *LocalCheckout
 	// Log, when set, receives the Copilot CLI output as it is produced.
 	Log io.Writer
 }
@@ -89,7 +92,7 @@ func Evaluate(ctx context.Context, opts EvaluateOptions, repoSlug string, prNumb
 		return nil, nil, fmt.Errorf("evaluation prompt is required")
 	}
 
-	prompt := buildPrompt(opts.Prompt, opts.Language, opts.RubberDuck, repoSlug, prNumber, comment)
+	prompt := buildPrompt(opts.Prompt, opts.Language, opts.RubberDuck, opts.LocalCheckout, repoSlug, prNumber, comment)
 	output, runErr := runCopilotCLI(ctx, opts, prompt)
 	usage := newUsage(opts, output)
 
@@ -118,7 +121,7 @@ func EvaluateBatch(ctx context.Context, opts EvaluateOptions, repoSlug string, p
 		return nil, nil, fmt.Errorf("at least one comment is required")
 	}
 
-	prompt := buildBatchPrompt(opts.Prompt, opts.Language, opts.RubberDuck, repoSlug, prNumber, comments)
+	prompt := buildBatchPrompt(opts.Prompt, opts.Language, opts.RubberDuck, opts.LocalCheckout, repoSlug, prNumber, comments)
 	output, runErr := runCopilotCLI(ctx, opts, prompt)
 	usage := newUsage(opts, output)
 
@@ -322,17 +325,28 @@ func endUntrusted(nonce string) string {
 	return fmt.Sprintf("--- END UNTRUSTED DATA %s ---\n", nonce)
 }
 
+// localCheckoutNote tells the Copilot CLI that the working directory reflects
+// the pull request. Only the verified SHA is included; the branch name is
+// pull-request-controlled and so kept out of the trusted instructions.
+func localCheckoutNote(checkout *LocalCheckout) string {
+	if checkout == nil {
+		return ""
+	}
+	return fmt.Sprintf("The current working directory is a local checkout of this pull request's head branch, verified to contain its latest commit %s, so the files on disk reflect the reviewed changes (possibly with later local commits on top).\n", checkout.SHA)
+}
+
 // buildPrompt composes the reviewer-supplied prompt with the comment context
 // and the required output contract, in that order. Every pull-request-derived
 // field (Comment.URL, Path, Line, DiffHunk and Body) is external, untrusted
 // input, so all of it is enclosed in a nonce-delimited untrusted-data block
 // and cannot be mistaken for instructions.
-func buildPrompt(userPrompt string, language string, rubberDuck bool, repoSlug string, prNumber int, comment *Comment) string {
+func buildPrompt(userPrompt string, language string, rubberDuck bool, checkout *LocalCheckout, repoSlug string, prNumber int, comment *Comment) string {
 	nonce := uuid.NewString()
 	var b strings.Builder
 	b.WriteString(userPrompt)
 	b.WriteString("\n\n---\n")
 	b.WriteString(fmt.Sprintf("Pull request: %s#%d\n", repoSlug, prNumber))
+	b.WriteString(localCheckoutNote(checkout))
 	b.WriteString(untrustedNotice(nonce))
 	b.WriteString(beginUntrusted(nonce))
 	b.WriteString(fmt.Sprintf("Comment URL: %s\n", comment.URL))
@@ -361,7 +375,7 @@ func buildPrompt(userPrompt string, language string, rubberDuck bool, repoSlug s
 // pull-request-derived field is enclosed in a single nonce-delimited
 // untrusted-data block. Identical diff hunks on repeated files are written out
 // only once to save tokens.
-func buildBatchPrompt(userPrompt string, language string, rubberDuck bool, repoSlug string, prNumber int, comments []*Comment) string {
+func buildBatchPrompt(userPrompt string, language string, rubberDuck bool, checkout *LocalCheckout, repoSlug string, prNumber int, comments []*Comment) string {
 	type hunkKey struct{ path, hunk string }
 	firstOccurrence := make(map[hunkKey]int, len(comments))
 
@@ -370,6 +384,7 @@ func buildBatchPrompt(userPrompt string, language string, rubberDuck bool, repoS
 	b.WriteString(userPrompt)
 	b.WriteString("\n\n---\n")
 	b.WriteString(fmt.Sprintf("Pull request: %s#%d\n", repoSlug, prNumber))
+	b.WriteString(localCheckoutNote(checkout))
 	b.WriteString(untrustedNotice(nonce))
 	b.WriteString(beginUntrusted(nonce))
 	for i, c := range comments {

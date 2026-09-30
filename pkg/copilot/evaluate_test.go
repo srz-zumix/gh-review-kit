@@ -149,12 +149,16 @@ func TestParseEvaluationInvalidVerdict(t *testing.T) {
 func TestBuildPrompt(t *testing.T) {
 	comment := &Comment{URL: "https://example.com/1", Path: "main.go", Line: 10, DiffHunk: "@@ -1 +1 @@", Body: "untrusted body"}
 
-	without := buildPrompt("judge this", "", false, "owner/repo", 1, comment)
+	without := buildPrompt("judge this", "", false, nil, "owner/repo", 1, comment)
 	if strings.Contains(without, rubberDuckRequest) {
 		t.Errorf("buildPrompt() with rubberDuck=false contains rubber duck request")
 	}
+	if strings.Contains(without, "local checkout") {
+		t.Errorf("buildPrompt() without a checkout mentions a local checkout")
+	}
 
-	with := buildPrompt("judge this", "", true, "owner/repo", 1, comment)
+	checkout := &LocalCheckout{Branch: "feature", SHA: "0123456789abcdef"}
+	with := buildPrompt("judge this", "", true, checkout, "owner/repo", 1, comment)
 	bodyIdx := strings.Index(with, comment.Body)
 	duckIdx := strings.Index(with, rubberDuckRequest)
 	contractIdx := strings.Index(with, "output your final judgement")
@@ -169,6 +173,13 @@ func TestBuildPrompt(t *testing.T) {
 	endIdx := strings.Index(with, "--- END UNTRUSTED DATA ")
 	if beginIdx < 0 || endIdx < 0 {
 		t.Fatalf("buildPrompt() missing untrusted-data markers: %q", with)
+	}
+	// The checkout note is a trusted instruction and must precede the untrusted block.
+	if noteIdx := strings.Index(with, checkout.SHA); noteIdx < 0 || noteIdx > beginIdx {
+		t.Errorf("buildPrompt() checkout note missing or not before the untrusted block: note=%d begin=%d", noteIdx, beginIdx)
+	}
+	if strings.Contains(with, checkout.Branch) {
+		t.Errorf("buildPrompt() leaked the pull-request-controlled branch name into the prompt")
 	}
 	// Every pull-request-derived field must sit inside the untrusted block.
 	for _, field := range []string{comment.URL, comment.Path, comment.DiffHunk, comment.Body} {
@@ -190,9 +201,9 @@ func TestBuildBatchPrompt(t *testing.T) {
 		{CommentID: 2, URL: "https://example.com/2", Path: "main.go", Line: 20, DiffHunk: "@@ -1 +1 @@", Body: "second"},
 		{CommentID: 3, URL: "https://example.com/3", Path: "other.go", Line: 5, DiffHunk: "@@ -2 +2 @@", Body: "third"},
 	}
-	got := buildBatchPrompt("judge these", "", false, "owner/repo", 1, comments)
+	got := buildBatchPrompt("judge these", "", false, &LocalCheckout{SHA: "0123456789abcdef"}, "owner/repo", 1, comments)
 
-	for _, want := range []string{"comment_id: 1", "comment_id: 2", "comment_id: 3", "first", "second", "third", "(same as comment 1)"} {
+	for _, want := range []string{"comment_id: 1", "comment_id: 2", "comment_id: 3", "first", "second", "third", "(same as comment 1)", "0123456789abcdef"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("buildBatchPrompt() missing %q in output: %q", want, got)
 		}

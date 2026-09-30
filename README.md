@@ -328,7 +328,7 @@ gh review-kit comments list 123 --format json
 #### List Copilot code review comments on a pull request
 
 ```sh
-gh review-kit copilot comments [--repo REPO] [--pr PR] [--author AUTHORS] [--include-resolved] [--include-outdated] [--evaluate] [--batch] [--prompt PROMPT | --prompt-file FILE] [--copilot-bin BIN] [--agent AGENT] [--allow-all-tools] [--model MODEL] [--evaluate-timeout DURATION] [--sandbox] [--session-id ID] [--rubber-duck] [--language LANGUAGE] [--dryrun] [--json FIELDS] [-- COPILOT_CLI_ARG...]
+gh review-kit copilot comments [--repo REPO] [--pr PR] [--author AUTHORS] [--include-resolved] [--include-outdated] [--evaluate] [--batch] [--prompt PROMPT | --prompt-file FILE] [--copilot-bin BIN] [--agent AGENT] [--allow-all-tools] [--model MODEL] [--evaluate-timeout DURATION] [--sandbox] [--session-id ID] [--rubber-duck] [--language LANGUAGE] [--check-worktree] [--dryrun] [--json FIELDS] [-- COPILOT_CLI_ARG...]
 ```
 
 List GitHub Copilot code review comments on a pull request.
@@ -347,12 +347,15 @@ Each run starts a new Copilot CLI session, so runs never inherit each other's co
 
 Use `--sandbox` to enable the Copilot CLI's OS-level shell sandbox for the evaluation. This also passes `--experimental`, since the Copilot CLI otherwise ignores `--sandbox`, and `--add-dir` for the directory the command runs in, since the sandbox otherwise blocks reading the checked-out repository. When paths are recommended, a `~/.copilot/settings.json` fragment granting them under `sandbox.userPolicy.filesystem.readonlyPaths` is printed as well, so the grant can be made permanent instead of repeated on every run; the Copilot CLI reads repository settings (`.github/copilot/settings.json` and `settings.local.json`) only in interactive mode, so they have no effect here.
 
+When run inside a local work tree of the repository, `--evaluate` first checks that the current branch is the pull request's head branch (by name, or by an upstream set by `gh pr checkout`) and contains its latest commit, and fails otherwise, so the Copilot CLI never judges comments against stale code. When the check passes, the Copilot CLI is told that the working directory reflects the pull request. Outside such a work tree the check is skipped. Use `--check-worktree=false` to skip it explicitly.
+
 **Options:**
 
 - `--agent`: Copilot CLI custom agent to use for evaluation (optional, default: none)
 - `--allow-all-tools`: Allow the Copilot CLI to use any tool without approval during evaluation (optional, default: false)
 - `--author`: Comment author logins to match, repeatable (optional, default: `copilot-pull-request-reviewer`)
 - `--batch`: Judge every comment with a single Copilot CLI invocation instead of one per comment (optional, default: true)
+- `--check-worktree`: With `--evaluate`, verify that a local work tree of the repository is on the pull request's head branch and contains its latest commit (optional, default: true)
 - `--copilot-bin`: Copilot CLI executable name or path (optional, default: `copilot`)
 - `--dryrun, -n`: Report the action that would be taken without performing it (optional, default: false)
 - `--evaluate`: Judge each comment with the Copilot CLI and act on the verdict (optional, default: false)

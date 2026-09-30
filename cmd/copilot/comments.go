@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/cli/cli/v2/pkg/cmdutil"
+	ghrepo "github.com/cli/go-gh/v2/pkg/repository"
 	"github.com/spf13/cobra"
 	pkgcopilot "github.com/srz-zumix/gh-review-kit/pkg/copilot"
 	"github.com/srz-zumix/go-gh-extension/pkg/gh"
@@ -38,6 +39,7 @@ func NewCommentsCmd() *cobra.Command {
 		rubberDuck      bool
 		dryRun          bool
 		language        string
+		checkWorktree   bool
 		opts            struct{ Exporter cmdutil.Exporter }
 	)
 
@@ -100,7 +102,14 @@ can be made permanent instead of repeated on every run; the Copilot CLI reads
 repository settings (.github/copilot/settings.json and settings.local.json)
 only in interactive mode, so they have no effect here.
 
-Use --language to have the evaluation reason written in a specific language.`,
+Use --language to have the evaluation reason written in a specific language.
+
+When run inside a local work tree of the repository, --evaluate first checks
+that the current branch is the pull request's head branch and contains its
+latest commit, and fails otherwise, so the Copilot CLI never judges comments
+against stale code. When the check passes, the Copilot CLI is told that the
+working directory reflects the pull request. Use --check-worktree=false to
+skip the check.`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if dash := cmd.ArgsLenAtDash(); dash > 0 || (dash < 0 && len(args) > 0) {
 				return fmt.Errorf("accepts no positional arguments; use -- to forward arguments to the Copilot CLI")
@@ -155,6 +164,27 @@ Use --language to have the evaluation reason written in a specific language.`,
 			}
 
 			repoSlug := fmt.Sprintf("%s/%s", repository.Owner, repository.Name)
+
+			var checkout *pkgcopilot.LocalCheckout
+			if checkWorktree {
+				head := pkgcopilot.PRHead{
+					Number: pr.GetNumber(),
+					Ref:    pr.GetHead().GetRef(),
+					SHA:    pr.GetHead().GetSHA(),
+					Repos: []ghrepo.Repository{
+						repository,
+						{Host: repository.Host, Owner: pr.GetHead().GetRepo().GetOwner().GetLogin(), Name: pr.GetHead().GetRepo().GetName()},
+					},
+				}
+				checkout, err = pkgcopilot.CheckLocalCheckout(ctx, head)
+				if err != nil {
+					return fmt.Errorf("local work tree does not match pull request #%d (use --check-worktree=false to skip this check): %w", pr.GetNumber(), err)
+				}
+				if checkout != nil {
+					logger.Info("Local work tree matches the pull request head", "branch", checkout.Branch, "sha", checkout.SHA)
+				}
+			}
+
 			if sessionID == "" {
 				sessionID = pkgcopilot.NewSessionID()
 			}
@@ -181,6 +211,7 @@ Use --language to have the evaluation reason written in a specific language.`,
 				SessionID:     sessionID,
 				Sandbox:       sandbox,
 				Language:      language,
+				LocalCheckout: checkout,
 				Log:           log,
 			}
 
@@ -237,6 +268,7 @@ Use --language to have the evaluation reason written in a specific language.`,
 	f.BoolVar(&rubberDuck, "rubber-duck", false, "Ask the Copilot CLI's built-in rubber duck agent for a second opinion before deciding")
 	f.BoolVarP(&dryRun, "dryrun", "n", false, "Report the action that would be taken without performing it")
 	f.StringVar(&language, "language", "", "Language for the Copilot CLI's evaluation reason (default: the Copilot CLI's default language)")
+	f.BoolVar(&checkWorktree, "check-worktree", true, "With --evaluate, verify that a local work tree of the repository is on the pull request's head branch and contains its latest commit")
 	cmdutil.AddFormatFlags(cmd, &opts.Exporter)
 
 	return cmd
