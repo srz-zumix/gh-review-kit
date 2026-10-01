@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 // claudeResultJSON renders a Claude Code result message whose text is result.
@@ -123,7 +124,7 @@ func TestClaudeStreamLog(t *testing.T) {
 		}
 	}
 	l.Flush()
-	want := "Checking.\n● Bash(git status)\n● Read(a.go)\nError: broken\n"
+	want := "Checking.\n● Bash(git status)\n● tool completed\n● Read(a.go)\nError: broken\n"
 	if out.String() != want {
 		t.Errorf("claudeStreamLog output = %q, want %q", out.String(), want)
 	}
@@ -137,6 +138,20 @@ func TestClaudeStreamLogErrorResult(t *testing.T) {
 	}
 	if out.String() != "usage limit reached\n" {
 		t.Errorf("claudeStreamLog output = %q, want the error result", out.String())
+	}
+}
+
+func TestClaudeStreamLogToolFailureAndWait(t *testing.T) {
+	var out strings.Builder
+	log := &claudeStreamLog{w: &out, lastEvent: time.Now().Add(-2 * time.Minute)}
+	log.reportWait()
+	if _, err := log.Write([]byte(`{"type":"user","message":{"content":[{"type":"tool_result","is_error":true,"content":"denied"}]}}` + "\n")); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+	log.reportWait()
+	want := "Waiting for Claude Code (no output for at least 1 minute)\n● tool failed\n"
+	if out.String() != want {
+		t.Errorf("claudeStreamLog output = %q, want %q", out.String(), want)
 	}
 }
 

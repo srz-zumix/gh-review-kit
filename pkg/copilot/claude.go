@@ -10,6 +10,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
+	"time"
 )
 
 // claudeSandboxSettings enables Claude Code's sandbox; it is passed inline
@@ -86,11 +88,28 @@ func runClaudeCLI(ctx context.Context, opts EvaluateOptions, prompt string) (cli
 	var progress *claudeStreamLog
 	var progressW io.Writer
 	if opts.Log != nil {
-		progress = &claudeStreamLog{w: opts.Log}
+		progress = &claudeStreamLog{w: opts.Log, lastEvent: time.Now()}
 		progressW = progress
+	}
+	var done chan struct{}
+	if progress != nil {
+		done = make(chan struct{})
+		go func() {
+			ticker := time.NewTicker(time.Minute)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					progress.reportWait()
+				case <-done:
+					return
+				}
+			}
+		}()
 	}
 	out, err := runProcess(ctx, opts, buildClaudeArgs(opts), prompt, false, progressW)
 	if progress != nil {
+		close(done)
 		progress.Flush()
 	}
 	res, ok := parseClaudeResult(out.Stdout)
@@ -121,11 +140,16 @@ type claudeAssistantMessage struct {
 // claudeStreamLog renders Claude Code's stream-json output to w line by line,
 // showing the assistant's text and tool calls.
 type claudeStreamLog struct {
-	w   io.Writer
-	buf []byte
+	mu        sync.Mutex
+	w         io.Writer
+	buf       []byte
+	lastEvent time.Time
 }
 
 func (l *claudeStreamLog) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.lastEvent = time.Now()
 	l.buf = append(l.buf, p...)
 	for {
 		i := bytes.IndexByte(l.buf, '\n')
@@ -140,8 +164,18 @@ func (l *claudeStreamLog) Write(p []byte) (int, error) {
 
 // Flush renders a final line that was not terminated by a newline.
 func (l *claudeStreamLog) Flush() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	l.render(l.buf)
 	l.buf = nil
+}
+
+func (l *claudeStreamLog) reportWait() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if time.Since(l.lastEvent) >= time.Minute {
+		fmt.Fprintln(l.w, "Waiting for Claude Code (no output for at least 1 minute)")
+	}
 }
 
 func (l *claudeStreamLog) render(line []byte) {
@@ -168,6 +202,25 @@ func (l *claudeStreamLog) render(line []byte) {
 				}
 			case "tool_use":
 				fmt.Fprintf(l.w, "● %s\n", claudeToolLabel(c.Name, c.Input))
+			}
+		}
+	case "user":
+		var msg struct {
+			Content []struct {
+				Type    string `json:"type"`
+				IsError bool   `json:"is_error"`
+			} `json:"content"`
+		}
+		if json.Unmarshal(m.Message, &msg) != nil {
+			return
+		}
+		for _, content := range msg.Content {
+			if content.Type == "tool_result" {
+				if content.IsError {
+					fmt.Fprintln(l.w, "● tool failed")
+				} else {
+					fmt.Fprintln(l.w, "● tool completed")
+				}
 			}
 		}
 	case "result":
