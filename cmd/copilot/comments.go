@@ -17,6 +17,12 @@ import (
 	"github.com/srz-zumix/go-gh-extension/pkg/render"
 )
 
+// deprecatedFlagReplacements maps the deprecated Copilot CLI specific flags to their replacements.
+var deprecatedFlagReplacements = map[string]string{
+	"copilot-bin":     "bin",
+	"allow-all-tools": "auto-approve",
+}
+
 // NewCommentsCmd creates a new command to list, and optionally evaluate, Copilot review comments on a pull request.
 func NewCommentsCmd() *cobra.Command {
 	var (
@@ -25,11 +31,11 @@ func NewCommentsCmd() *cobra.Command {
 		authors         []string
 		includeResolved bool
 		includeOutdated bool
-		evaluate        bool
 		batch           bool
 		prompt          string
 		promptFile      string
 		evaluatorName   string
+		aliasName       string
 		bin             string
 		agent           string
 		autoApprove     bool
@@ -51,7 +57,7 @@ func NewCommentsCmd() *cobra.Command {
 
 By default, resolved and outdated review threads are excluded. Use --evaluate
 to additionally judge each comment with the Copilot CLI (or with Claude Code,
-see --evaluator): comments judged invalid receive a thumbs-down reaction and
+see --evaluate=claude): comments judged invalid receive a thumbs-down reaction and
 have their review thread resolved,
 while comments judged valid have their review thread resolved without a
 reaction. The prompt used to judge comments must be supplied with --prompt or
@@ -108,8 +114,17 @@ only in interactive mode, so they have no effect here.
 
 Use --language to have the evaluation reason written in a specific language.
 
-Use --evaluator claude to judge comments with Claude Code instead of the
-Copilot CLI; --bin selects its executable (default: claude). Claude Code also
+Use --alias-set NAME to register a gh alias instead of running: the other flags
+given (and any arguments after --) are embedded in a shell alias, so that
+"gh NAME [copilot|claude] [flags...]" runs this command with them. The
+evaluator given to --evaluate becomes the alias's default (copilot otherwise),
+and flags passed to the alias are appended, so they take precedence. A relative
+--prompt-file is stored as an absolute path. An existing alias with the same
+name is overwritten.
+
+Use --evaluate=claude to judge comments with Claude Code instead of the
+Copilot CLI (--evaluate alone, or --evaluate=copilot, selects the Copilot CLI;
+the value must be attached with =); --bin selects its executable (default: claude). Claude Code also
 runs in non-interactive mode (-p), so --auto-approve applies auto mode
 (--permission-mode auto), and arguments after a -- separator are
 forwarded to it, e.g. -- --allowedTools='Bash(go *)'. Denied tool calls are
@@ -132,9 +147,45 @@ skip the check.`,
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if cmd.Flags().Changed("alias-set") {
+				if aliasName == "" {
+					return fmt.Errorf("--alias-set requires an alias name")
+				}
+				if (prompt == "") == (promptFile == "") {
+					return fmt.Errorf("--alias-set requires exactly one of --prompt or --prompt-file")
+				}
+				defaultEvaluator, err := pkgcopilot.ParseEvaluator(evaluatorName)
+				if err != nil {
+					return fmt.Errorf("invalid --evaluate value: %w", err)
+				}
+				aliasFlags, err := pkgcopilot.CollectAliasFlags(cmd.Flags(), []string{"alias-set", "evaluate"}, []string{"prompt-file"})
+				if err != nil {
+					return fmt.Errorf("failed to collect flags for alias '%s': %w", aliasName, err)
+				}
+				expansion := pkgcopilot.BuildAliasExpansion(defaultEvaluator, aliasFlags, args)
+				if err := pkgcopilot.RegisterAlias(context.Background(), aliasName, expansion, cmd.ErrOrStderr()); err != nil {
+					return fmt.Errorf("failed to register gh alias '%s': %w", aliasName, err)
+				}
+				return nil
+			}
+
+			evaluate := cmd.Flags().Changed("evaluate")
+			var evaluator pkgcopilot.Evaluator
 			if evaluate {
 				if (prompt == "") == (promptFile == "") {
 					return fmt.Errorf("--evaluate requires exactly one of --prompt or --prompt-file")
+				}
+				var err error
+				evaluator, err = pkgcopilot.ParseEvaluator(evaluatorName)
+				if err != nil {
+					return fmt.Errorf("invalid --evaluate value: %w", err)
+				}
+				if evaluator.IsClaude() {
+					for _, name := range []string{"copilot-bin", "allow-all-tools"} {
+						if cmd.Flags().Changed(name) {
+							return fmt.Errorf("--%s applies only to the Copilot CLI evaluator; use --%s instead", name, deprecatedFlagReplacements[name])
+						}
+					}
 				}
 			}
 
@@ -200,7 +251,6 @@ skip the check.`,
 				}
 			}
 
-			evaluator := pkgcopilot.Evaluator(evaluatorName)
 			name := evaluator.DisplayName()
 			// An existing session must be resumed rather than created again.
 			resumeSession := sessionID != ""
@@ -291,12 +341,19 @@ skip the check.`,
 	f.StringSliceVar(&authors, "author", nil, "Comment author logins to match (default: the Copilot code review bot)")
 	f.BoolVar(&includeResolved, "include-resolved", false, "Include comments whose review thread is already resolved")
 	f.BoolVar(&includeOutdated, "include-outdated", false, "Include comments whose review thread is outdated")
-	f.BoolVar(&evaluate, "evaluate", false, "Judge each comment with the Copilot CLI (or Claude Code, see --evaluator) and act on the verdict")
+	f.StringVar(&evaluatorName, "evaluate", "", "Judge each comment with the Copilot CLI or Claude Code and act on the verdict; use --evaluate=copilot|claude to pick the CLI (default: copilot)")
+	f.Lookup("evaluate").NoOptDefVal = string(pkgcopilot.EvaluatorCopilot)
 	f.BoolVar(&batch, "batch", true, "Judge every comment with a single CLI invocation instead of one per comment")
 	f.StringVarP(&prompt, "prompt", "p", "", "Prompt used to judge comments (mutually exclusive with --prompt-file)")
 	f.StringVar(&promptFile, "prompt-file", "", "File containing the prompt used to judge comments (mutually exclusive with --prompt)")
-	cmdutil.StringEnumFlag(cmd, &evaluatorName, "evaluator", "", string(pkgcopilot.EvaluatorCopilot), pkgcopilot.Evaluators, "CLI used to judge comments with --evaluate")
-	f.StringVar(&bin, "bin", "", "Evaluator CLI executable name or path (default: copilot, or claude with --evaluator claude)")
+	f.StringVar(&bin, "bin", "", "Evaluator CLI executable name or path (default: copilot, or claude with --evaluate=claude)")
+	f.StringVar(&aliasName, "alias-set", "", "Register a gh alias with this name that runs this command with the other given flags, then exit; the alias takes an optional leading copilot|claude and further flags")
+	// Deprecated aliases kept for compatibility with scripts written for earlier releases.
+	f.StringVar(&bin, "copilot-bin", "", "Copilot CLI executable name or path")
+	f.BoolVar(&autoApprove, "allow-all-tools", false, "Allow the Copilot CLI to use any tool without approval during evaluation")
+	for name, replacement := range deprecatedFlagReplacements {
+		_ = f.MarkDeprecated(name, fmt.Sprintf("use --%s instead", replacement))
+	}
 	f.StringVar(&agent, "agent", "", "Custom agent to use for evaluation")
 	f.BoolVar(&autoApprove, "auto-approve", false, "Apply the tool permission setting review-kit recommends for the evaluator CLI, so evaluation runs without approval prompts (Copilot CLI: --allow-all-tools, Claude Code: --permission-mode auto)")
 	f.StringVar(&model, "model", "", "Model to use for evaluation (default: the evaluator CLI's default model)")

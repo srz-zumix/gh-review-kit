@@ -201,24 +201,26 @@ type claudeExistingOptions struct {
 // existingClaudeOptions reads the permission options out of opts, including
 // the variadic --allowedTools and --add-dir forms.
 func existingClaudeOptions(opts EvaluateOptions) claudeExistingOptions {
-	existing := claudeExistingOptions{auto: opts.AutoApprove, rules: map[string]bool{}}
+	existing := claudeExistingOptions{rules: map[string]bool{}}
+	// The --permission-mode emitted for AutoApprove precedes ExtraArgs, so a
+	// later --permission-mode overrides it; the last one is the effective mode.
+	mode := ""
+	if opts.AutoApprove {
+		mode = "auto"
+	}
+	skipPermissions := false
 	args := opts.ExtraArgs
 	for i := 0; i < len(args); i++ {
 		name, value, hasValue := strings.Cut(args[i], "=")
 		switch name {
 		case "--dangerously-skip-permissions":
-			existing.bypass = true
+			skipPermissions = true
 		case "--permission-mode":
 			if !hasValue && i+1 < len(args) {
 				i++
 				value = args[i]
 			}
-			switch value {
-			case "auto":
-				existing.auto = true
-			case "bypassPermissions":
-				existing.bypass = true
-			}
+			mode = value
 		case "--allowedTools", "--allowed-tools", "--add-dir":
 			var values []string
 			if hasValue {
@@ -239,6 +241,8 @@ func existingClaudeOptions(opts EvaluateOptions) claudeExistingOptions {
 			}
 		}
 	}
+	existing.auto = mode == "auto"
+	existing.bypass = skipPermissions || mode == "bypassPermissions"
 	return existing
 }
 

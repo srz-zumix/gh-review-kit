@@ -142,6 +142,9 @@ func TestExistingClaudeOptions(t *testing.T) {
 		{"permission mode= bypass", EvaluateOptions{ExtraArgs: []string{"--permission-mode=bypassPermissions"}}, false, true, nil, nil},
 		{"skip permissions", EvaluateOptions{ExtraArgs: []string{"--dangerously-skip-permissions"}}, false, true, nil, nil},
 		{"dontAsk is neither", EvaluateOptions{ExtraArgs: []string{"--permission-mode", "dontAsk"}}, false, false, nil, nil},
+		{"later mode overrides auto approve", EvaluateOptions{AutoApprove: true, ExtraArgs: []string{"--permission-mode", "dontAsk"}}, false, false, nil, nil},
+		{"later mode overrides bypass", EvaluateOptions{ExtraArgs: []string{"--permission-mode=bypassPermissions", "--permission-mode", "auto"}}, true, false, nil, nil},
+		{"skip permissions survives mode override", EvaluateOptions{ExtraArgs: []string{"--dangerously-skip-permissions", "--permission-mode", "dontAsk"}}, false, true, nil, nil},
 		{
 			"variadic allowed tools",
 			EvaluateOptions{ExtraArgs: []string{"--allowedTools", "Bash(git log *)", "Read", "--model", "x"}},
@@ -306,6 +309,7 @@ func TestNeedsToolPermissionWarningClaude(t *testing.T) {
 		{"skip permissions", false, []string{"--dangerously-skip-permissions"}, false},
 		{"copilot option does not count", false, []string{"--allow-all-tools"}, true},
 		{"dontAsk denies everything", false, []string{"--permission-mode", "dontAsk"}, true},
+		{"dontAsk overrides auto approve", true, []string{"--permission-mode", "dontAsk"}, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
