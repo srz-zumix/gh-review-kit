@@ -37,37 +37,37 @@ func TestBuildClaudeArgs(t *testing.T) {
 		{
 			name: "minimal",
 			opts: EvaluateOptions{},
-			want: []string{"-p", "--output-format", "json"},
+			want: []string{"-p", "--output-format", "stream-json", "--verbose"},
 		},
 		{
 			name: "new session",
 			opts: EvaluateOptions{Agent: "reviewer", SessionID: "sess-1", Model: "sonnet"},
-			want: []string{"-p", "--output-format", "json", "--agent", "reviewer", "--session-id", "sess-1", "--model", "sonnet"},
+			want: []string{"-p", "--output-format", "stream-json", "--verbose", "--agent", "reviewer", "--session-id", "sess-1", "--model", "sonnet"},
 		},
 		{
 			name: "resumed session",
 			opts: EvaluateOptions{SessionID: "sess-1", ResumeSession: true},
-			want: []string{"-p", "--output-format", "json", "--resume", "sess-1"},
+			want: []string{"-p", "--output-format", "stream-json", "--verbose", "--resume", "sess-1"},
 		},
 		{
 			name: "allow all tools is auto mode",
 			opts: EvaluateOptions{AutoApprove: true},
-			want: []string{"-p", "--output-format", "json", "--permission-mode", "auto"},
+			want: []string{"-p", "--output-format", "stream-json", "--verbose", "--permission-mode", "auto"},
 		},
 		{
 			name: "sandbox through settings",
 			opts: EvaluateOptions{Sandbox: true},
-			want: []string{"-p", "--output-format", "json", "--settings", claudeSandboxSettings},
+			want: []string{"-p", "--output-format", "stream-json", "--verbose", "--settings", claudeSandboxSettings},
 		},
 		{
 			name: "rubber duck does not change args",
 			opts: EvaluateOptions{RubberDuck: true},
-			want: []string{"-p", "--output-format", "json"},
+			want: []string{"-p", "--output-format", "stream-json", "--verbose"},
 		},
 		{
 			name: "extra args appended last",
 			opts: EvaluateOptions{AutoApprove: true, ExtraArgs: []string{"--allowedTools", "Bash(git *)"}},
-			want: []string{"-p", "--output-format", "json", "--permission-mode", "auto", "--allowedTools", "Bash(git *)"},
+			want: []string{"-p", "--output-format", "stream-json", "--verbose", "--permission-mode", "auto", "--allowedTools", "Bash(git *)"},
 		},
 	}
 	for _, tt := range tests {
@@ -104,6 +104,39 @@ func TestParseClaudeResult(t *testing.T) {
 				t.Errorf("parseClaudeResult() result = %q, want %q", got.Result, tt.want)
 			}
 		})
+	}
+}
+
+func TestClaudeStreamLog(t *testing.T) {
+	var out strings.Builder
+	l := &claudeStreamLog{w: &out}
+	stream := `{"type":"system","subtype":"init"}` + "\n" +
+		`{"type":"assistant","message":{"content":[{"type":"thinking","thinking":"hmm"},{"type":"text","text":"Checking."},{"type":"tool_use","name":"Bash","input":{"command":"git status"}}]}}` + "\n" +
+		`{"type":"user","message":{"content":[{"type":"tool_result","content":"clean"}]}}` + "\n" +
+		`{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"a.go"}}]}}` + "\n" +
+		`{"type":"result","is_error":false,"result":"done"}` + "\n" +
+		"Error: broken"
+	// Split mid-line to exercise buffering across writes.
+	for _, chunk := range []string{stream[:50], stream[50:]} {
+		if _, err := l.Write([]byte(chunk)); err != nil {
+			t.Fatalf("Write() error = %v", err)
+		}
+	}
+	l.Flush()
+	want := "Checking.\n● Bash(git status)\n● Read(a.go)\nError: broken\n"
+	if out.String() != want {
+		t.Errorf("claudeStreamLog output = %q, want %q", out.String(), want)
+	}
+}
+
+func TestClaudeStreamLogErrorResult(t *testing.T) {
+	var out strings.Builder
+	l := &claudeStreamLog{w: &out}
+	if _, err := l.Write([]byte(`{"type":"result","is_error":true,"result":"usage limit reached"}` + "\n")); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+	if out.String() != "usage limit reached\n" {
+		t.Errorf("claudeStreamLog output = %q, want the error result", out.String())
 	}
 }
 

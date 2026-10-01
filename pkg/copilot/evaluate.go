@@ -195,13 +195,14 @@ func runCLI(ctx context.Context, opts EvaluateOptions, prompt string) (cliRun, e
 	if opts.Evaluator.IsClaude() {
 		return runClaudeCLI(ctx, opts, prompt)
 	}
-	out, err := runProcess(ctx, opts, buildArgs(opts, prompt), "", true)
+	out, err := runProcess(ctx, opts, buildArgs(opts, prompt), "", true, nil)
 	return cliRun{Output: out.Stdout, Usage: newUsage(opts, out.Stdout)}, err
 }
 
 // runProcess executes the CLI with args, feeding stdin when non-empty. When
-// merge is true, stdout and stderr are captured as a single stream.
-func runProcess(ctx context.Context, opts EvaluateOptions, args []string, stdin string, merge bool) (processOutput, error) {
+// merge is true, stdout and stderr are captured as a single stream; otherwise
+// stdout is also copied to progress when it is non-nil.
+func runProcess(ctx context.Context, opts EvaluateOptions, args []string, stdin string, merge bool, progress io.Writer) (processOutput, error) {
 	bin := opts.Bin
 	if bin == "" {
 		bin = opts.Evaluator.DefaultBin()
@@ -240,6 +241,9 @@ func runProcess(ctx context.Context, opts EvaluateOptions, args []string, stdin 
 		outW, errW = w, w
 	} else {
 		outW, errW = &stdout, &stderr
+		if progress != nil {
+			outW = io.MultiWriter(&stdout, progress)
+		}
 		if opts.Log != nil {
 			errW = io.MultiWriter(&stderr, opts.Log)
 		}
