@@ -218,7 +218,7 @@ func runProcess(ctx context.Context, opts EvaluateOptions, args []string, stdin 
 	cmd := exec.CommandContext(runCtx, bin, args...)
 	// The executable can be a shell wrapper that forks the real CLI, so
 	// signalling cmd alone would leave the CLI running past the timeout.
-	setProcessGroup(cmd)
+	setProcessGroup(cmd, opts.Evaluator.IsClaude())
 	cmd.Cancel = func() error { return killProcessGroup(cmd) }
 	// A process that survives the signal must not hold the output pipes, and
 	// therefore cmd.Run, open indefinitely.

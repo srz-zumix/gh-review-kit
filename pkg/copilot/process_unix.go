@@ -7,10 +7,11 @@ import (
 	"syscall"
 )
 
-// setProcessGroup puts cmd in a process group of its own so that the whole
-// process tree can be signalled at once.
-func setProcessGroup(cmd *exec.Cmd) {
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+// setProcessGroup isolates the process tree for cancellation. Claude also
+// needs a new session: its shell initialization can access /dev/tty, which
+// stops a background process group under terminal job control.
+func setProcessGroup(cmd *exec.Cmd, detach bool) {
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: !detach, Setsid: detach}
 }
 
 // killProcessGroup kills cmd together with every process it spawned, falling
