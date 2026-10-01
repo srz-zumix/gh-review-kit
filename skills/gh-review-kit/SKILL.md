@@ -658,11 +658,11 @@ gh review-kit insights report --dataset ./dataset \
 
 List GitHub Copilot code review comments on a pull request. By default, resolved and outdated review threads are excluded.
 
-Use `--evaluate` to additionally judge each comment with the [Copilot CLI](https://github.com/github/copilot-cli): comments judged invalid receive a thumbs-down reaction and have their review thread resolved with resolution reason `INVALID`; comments judged valid have their review thread resolved with resolution reason `ADDRESSED`. The prompt used to judge comments must be supplied with `--prompt` or `--prompt-file`; gh-review-kit does not ship a built-in evaluation prompt — it is up to the caller to describe how to judge a comment.
+Use `--evaluate` to additionally judge each comment with the [Copilot CLI](https://github.com/github/copilot-cli) (or with [Claude Code](https://docs.claude.com/en/docs/claude-code), see `--evaluator`): comments judged invalid receive a thumbs-down reaction and have their review thread resolved with resolution reason `INVALID`; comments judged valid have their review thread resolved with resolution reason `ADDRESSED`. The prompt used to judge comments must be supplied with `--prompt` or `--prompt-file`; gh-review-kit does not ship a built-in evaluation prompt — it is up to the caller to describe how to judge a comment.
 
-The Copilot CLI runs in non-interactive mode (`-p`) for evaluation, so it can never prompt for tool permissions and denies anything not pre-authorized, regardless of whether the command is run from a terminal or in CI. Use `--allow-all-tools` to allow every tool, or pass arguments after a `--` separator to forward them to the Copilot CLI, e.g. `-- --allow-tool=... --deny-tool=...` to scope permissions more tightly (an organization's Copilot policy may disable these bypass options entirely). Without either, a warning is printed before evaluation starts, and any tool calls the Copilot CLI denies are reported as a warning afterward, since they may leave its judgement based on incomplete information.
+The Copilot CLI runs in non-interactive mode (`-p`) for evaluation, so it can never prompt for tool permissions and denies anything not pre-authorized, regardless of whether the command is run from a terminal or in CI. Use `--auto-approve` to apply the permission setting review-kit recommends for the Copilot CLI (`--allow-all-tools`, which allows every tool), or pass arguments after a `--` separator to forward them to the Copilot CLI, e.g. `-- --allow-tool=... --deny-tool=...` to scope permissions more tightly (an organization's Copilot policy may disable these bypass options entirely). Without either, a warning is printed before evaluation starts, and any tool calls the Copilot CLI denies are reported as a warning afterward, since they may leave its judgement based on incomplete information.
 
-The Copilot CLI keeps tool, path, and URL permissions in separate categories, so `--allow-all-tools` authorizes tool execution but not file access outside the working directory. Denied tool calls are therefore also reported with the options that would have allowed them, as a `--` passthrough list to paste onto a re-run, e.g. `-- --allow-tool='shell(go:*)' --add-dir=/path/to/module/cache`. Paths are always narrowed to `--add-dir`; `--allow-all-paths` is never recommended. Note that `--sandbox` enforces an OS-level filesystem policy on top of these permissions, so denials on paths no `--add-dir` can reach, such as symlinks out of the working directory or network access, persist until `--sandbox` is dropped.
+The Copilot CLI keeps tool, path, and URL permissions in separate categories, so `--auto-approve` authorizes tool execution but not file access outside the working directory. Denied tool calls are therefore also reported with the options that would have allowed them, as a `--` passthrough list to paste onto a re-run, e.g. `-- --allow-tool='shell(go:*)' --add-dir=/path/to/module/cache`. Paths are always narrowed to `--add-dir`; `--allow-all-paths` is never recommended. Note that `--sandbox` enforces an OS-level filesystem policy on top of these permissions, so denials on paths no `--add-dir` can reach, such as symlinks out of the working directory or network access, persist until `--sandbox` is dropped.
 
 Use `--model` to select the Copilot CLI model used for evaluation, and `--rubber-duck` to additionally ask the Copilot CLI's built-in [rubber duck agent](https://docs.github.com/en/copilot/concepts/agents/copilot-cli/rubber-duck) for a second opinion before it decides; the rubber duck agent runs on a different model, so this adds latency and model usage.
 
@@ -672,37 +672,40 @@ Each run starts a new Copilot CLI session, so runs never inherit each other's co
 
 Use `--sandbox` to enable the Copilot CLI's OS-level shell sandbox for the evaluation. This also passes `--experimental`, since the Copilot CLI otherwise ignores `--sandbox`, and `--add-dir` for the directory the command runs in, since the sandbox otherwise blocks reading the checked-out repository. When paths are recommended, a `~/.copilot/settings.json` fragment granting them under `sandbox.userPolicy.filesystem.readonlyPaths` is printed as well, so the grant can be made permanent instead of repeated on every run; the Copilot CLI reads repository settings (`.github/copilot/settings.json` and `settings.local.json`) only in interactive mode, so they have no effect here.
 
+Use `--evaluator claude` to judge comments with Claude Code instead of the Copilot CLI; `--bin` selects its executable (default: `claude`). Claude Code also runs in non-interactive mode (`-p`), with the prompt piped through stdin, so `--auto-approve` applies auto mode (`--permission-mode auto`), and arguments after a `--` separator are forwarded to it, e.g. `-- --allowedTools='Bash(go *)'`. Denied tool calls are reported with the `--allowedTools` and `--add-dir` options that would have allowed them, as a `--` passthrough list to paste onto a re-run. `--sandbox` enables Claude Code's sandbox through `--settings`, so a `--settings` passed after `--` takes precedence; `--rubber-duck` is ignored with a warning, since Claude Code has no rubber duck agent. The estimated cost Claude Code reports is logged instead of AI credits. A session ID passed with `--session-id` is resumed with `--resume`, and the evaluation of every comment with `--batch=false` continues the same session.
+
 When run inside a local work tree of the repository, `--evaluate` first checks that the current branch is the pull request's head branch (by name, or by an upstream set by `gh pr checkout`) and contains its latest commit, and fails otherwise. When the check passes, the Copilot CLI is told that the working directory reflects the pull request. Outside such a work tree the check is skipped. Use `--check-worktree=false` to skip it explicitly.
 
 ```bash
-gh review-kit copilot comments [flags] [-- copilot-cli-arg...]
+gh review-kit copilot comments [flags] [-- agent-cli-arg...]
 ```
 
 ### Options
 
 | Flag | Description |
 | --- | --- |
-| `--agent` | Copilot CLI custom agent to use for evaluation |
-| `--allow-all-tools` | Allow the Copilot CLI to use any tool without approval during evaluation (default: false) |
+| `--agent` | Custom agent to use for evaluation |
 | `--author` | Comment author logins to match (repeatable, default: `copilot-pull-request-reviewer`) |
-| `--batch` | Judge every comment with a single Copilot CLI invocation instead of one per comment (default: true) |
+| `--auto-approve` | Apply the tool permission setting review-kit recommends for the evaluator CLI, so evaluation runs without approval prompts: `--allow-all-tools` for the Copilot CLI, `--permission-mode auto` for Claude Code (default: false) |
+| `--batch` | Judge every comment with a single CLI invocation instead of one per comment (default: true) |
+| `--bin` | Evaluator CLI executable name or path (default: `copilot`, or `claude` with `--evaluator claude`) |
 | `--check-worktree` | With `--evaluate`, verify that a local work tree of the repository is on the pull request's head branch and contains its latest commit (default: true) |
-| `--copilot-bin` | Copilot CLI executable name or path (default: `copilot`) |
 | `--dryrun, -n` | Report the action that would be taken without performing it (default: false) |
-| `--evaluate` | Judge each comment with the Copilot CLI and act on the verdict (default: false) |
-| `--evaluate-timeout` | Timeout for a single Copilot CLI evaluation, per comment; a batch run is given this much for every comment it covers (default: `15m`) |
+| `--evaluate` | Judge each comment with the Copilot CLI (or Claude Code, see `--evaluator`) and act on the verdict (default: false) |
+| `--evaluate-timeout` | Timeout for a single CLI evaluation, per comment; a batch run is given this much for every comment it covers (default: `15m`) |
+| `--evaluator` | CLI used to judge comments with `--evaluate`: `copilot` or `claude` (default: `copilot`) |
 | `--include-outdated` | Include comments whose review thread is outdated (default: false) |
 | `--include-resolved` | Include comments whose review thread is already resolved (default: false) |
-| `--language` | Language for the Copilot CLI's evaluation reason (default: the Copilot CLI's default language) |
-| `--model` | Copilot CLI model to use for evaluation (default: the Copilot CLI's default model) |
+| `--language` | Language for the evaluation reason (default: the evaluator CLI's default language) |
+| `--model` | Model to use for evaluation (default: the evaluator CLI's default model) |
 | `--pr` | Pull request number, URL, or branch name (default: current branch) |
-| `--prompt, -p` | Prompt used to judge comments with the Copilot CLI (required with `--evaluate`, mutually exclusive with `--prompt-file`) |
-| `--prompt-file` | File containing the prompt used to judge comments with the Copilot CLI (required with `--evaluate`, mutually exclusive with `--prompt`) |
+| `--prompt, -p` | Prompt used to judge comments (required with `--evaluate`, mutually exclusive with `--prompt-file`) |
+| `--prompt-file` | File containing the prompt used to judge comments (required with `--evaluate`, mutually exclusive with `--prompt`) |
 | `--repo, -R` | Repository in the format 'owner/repo' (default: current repository) |
-| `--rubber-duck` | Ask the Copilot CLI's built-in rubber duck agent for a second opinion before deciding (default: false) |
-| `--sandbox` | Enable the Copilot CLI's OS-level shell sandbox for the evaluation (default: false; also passes `--experimental` and `--add-dir` for the current directory) |
-| `--session-id` | Copilot CLI session to resume (default: a new session) |
-| `-- copilot-cli-arg...` | Arguments forwarded verbatim to the Copilot CLI after a `--` separator (repeatable) |
+| `--rubber-duck` | Ask the Copilot CLI's built-in rubber duck agent for a second opinion before deciding; ignored for Claude Code (default: false) |
+| `--sandbox` | Enable the evaluator CLI's OS-level shell sandbox for the evaluation; the Copilot CLI also gets `--experimental` and `--add-dir` for the current directory (default: false) |
+| `--session-id` | Session to resume (default: a new session) |
+| `-- agent-cli-arg...` | Arguments forwarded verbatim to the evaluator CLI after a `--` separator (repeatable) |
 
 ### Examples
 
@@ -714,28 +717,34 @@ gh review-kit copilot comments
 gh review-kit copilot comments --pr 123 --include-resolved --include-outdated
 
 # Judge each comment with the Copilot CLI, allowing every tool without prompting
-gh review-kit copilot comments --pr 123 --evaluate --prompt-file ./judge-prompt.md --allow-all-tools
+gh review-kit copilot comments --pr 123 --evaluate --prompt-file ./judge-prompt.md --auto-approve
 
 # Judge each comment, scoping permissions to only what's needed instead of allowing everything
 gh review-kit copilot comments --pr 123 --evaluate --prompt-file ./judge-prompt.md -- --allow-tool=read
 
 # Judge each comment with its own Copilot CLI invocation instead of a single combined pass
-gh review-kit copilot comments --pr 123 --evaluate --batch=false --prompt-file ./judge-prompt.md --allow-all-tools
+gh review-kit copilot comments --pr 123 --evaluate --batch=false --prompt-file ./judge-prompt.md --auto-approve
 
 # Judge each comment with a specific model, and get a rubber duck second opinion
-gh review-kit copilot comments --pr 123 --evaluate --prompt-file ./judge-prompt.md --allow-all-tools --model gpt-5 --rubber-duck
+gh review-kit copilot comments --pr 123 --evaluate --prompt-file ./judge-prompt.md --auto-approve --model gpt-5 --rubber-duck
 
 # Judge each comment and have the evaluation reason written in Japanese
-gh review-kit copilot comments --pr 123 --evaluate --prompt-file ./judge-prompt.md --language Japanese --allow-all-tools
+gh review-kit copilot comments --pr 123 --evaluate --prompt-file ./judge-prompt.md --language Japanese --auto-approve
 
 # Preview the actions an evaluation run would take, without performing them
-gh review-kit copilot comments --pr 123 --evaluate --prompt-file ./judge-prompt.md --dryrun --allow-all-tools
+gh review-kit copilot comments --pr 123 --evaluate --prompt-file ./judge-prompt.md --dryrun --auto-approve
+
+# Judge each comment with Claude Code in auto permission mode
+gh review-kit copilot comments --pr 123 --evaluate --evaluator claude --prompt-file ./judge-prompt.md --auto-approve
+
+# Judge each comment with Claude Code, scoping permissions to only what's needed
+gh review-kit copilot comments --pr 123 --evaluate --evaluator claude --prompt-file ./judge-prompt.md -- --allowedTools='Bash(go *)'
 
 # Judge each comment with the Copilot CLI's OS-level shell sandbox enabled
-gh review-kit copilot comments --pr 123 --evaluate --prompt-file ./judge-prompt.md --sandbox --allow-all-tools
+gh review-kit copilot comments --pr 123 --evaluate --prompt-file ./judge-prompt.md --sandbox --auto-approve
 
 # Resume a previous Copilot CLI session to keep its context
-gh review-kit copilot comments --pr 123 --evaluate --prompt-file ./judge-prompt.md --session-id 0b2d6f5e-... --allow-all-tools
+gh review-kit copilot comments --pr 123 --evaluate --prompt-file ./judge-prompt.md --session-id 0b2d6f5e-... --auto-approve
 ```
 
 ## Give Feedback on Review Comments (copilot feedback)

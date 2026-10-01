@@ -18,45 +18,62 @@ import (
 
 // EvaluateOptions configures how the Copilot CLI is invoked to judge a Comment.
 type EvaluateOptions struct {
-	// Bin is the Copilot CLI executable name or path. Defaults to "copilot".
+	// Evaluator selects the CLI that runs the evaluation. The zero value is the
+	// Copilot CLI; the other fields' documentation describes the Copilot CLI and
+	// notes how Claude Code differs.
+	Evaluator Evaluator
+	// Bin is the CLI executable name or path. Defaults to Evaluator.DefaultBin().
 	Bin string
 	// Agent, when set, is passed as --agent to the Copilot CLI.
 	Agent string
 	// Prompt is the reviewer-supplied instructions describing how to judge (and
 	// optionally fix) a comment. It is required.
 	Prompt string
-	// AllowAllTools, when true, passes --allow-all-tools to the Copilot CLI. The
-	// Copilot CLI's -p mode can never prompt for approval, so leaving this false
-	// causes any tool call not otherwise authorized via ExtraArgs to be denied.
-	AllowAllTools bool
+	// AutoApprove, when true, applies the permission setting review-kit
+	// recommends for the evaluator: --allow-all-tools for the Copilot CLI and
+	// --permission-mode auto for Claude Code. The -p mode can never prompt for
+	// approval, so leaving this false causes any tool call not otherwise
+	// authorized via ExtraArgs to be denied.
+	AutoApprove bool
 	// Model, when set, is passed as --model to select the Copilot CLI model used
 	// for evaluation.
 	Model string
 	// RubberDuck, when true, adds a natural-language request to the prompt
 	// asking the Copilot CLI's built-in rubber duck agent for a second opinion;
-	// the rubber duck agent cannot be selected with Agent/--agent.
+	// the rubber duck agent cannot be selected with Agent/--agent. Claude Code
+	// has no such agent, so it is ignored there.
 	RubberDuck bool
 	// ExtraArgs are appended verbatim to the Copilot CLI invocation, after
-	// AllowAllTools and Model, e.g. for --allow-tool/--deny-tool to scope
-	// permissions more tightly than AllowAllTools.
+	// AutoApprove and Model, e.g. for --allow-tool/--deny-tool to scope
+	// permissions more tightly than AutoApprove.
 	ExtraArgs []string
 	// Timeout bounds how long a single Copilot CLI invocation may run. Zero means no timeout.
 	Timeout time.Duration
 	// SessionID, when set, is passed as --session-id so that evaluations share
 	// a single Copilot CLI session, and so that a later run can resume it.
 	SessionID string
+	// ResumeSession, for Claude Code, resumes SessionID with --resume instead of
+	// creating it with --session-id, which rejects an ID that already exists.
+	ResumeSession bool
 	// Sandbox, when true, passes --sandbox to enable the Copilot CLI's OS-level
 	// shell sandbox for the evaluation. The Copilot CLI ignores --sandbox unless
 	// --experimental is also passed, so --experimental is added automatically,
-	// as is --add-dir for the working directory the evaluation runs in.
+	// as is --add-dir for the working directory the evaluation runs in. Claude
+	// Code gets its sandbox enabled through --settings instead.
 	Sandbox bool
 	// Language, when set, instructs the Copilot CLI to respond in that language.
 	Language string
 	// LocalCheckout, when set, tells the Copilot CLI that the working directory
 	// is a verified checkout of the pull request's latest commit.
 	LocalCheckout *LocalCheckout
-	// Log, when set, receives the Copilot CLI output as it is produced.
+	// Log, when set, receives the CLI output as it is produced; Claude Code
+	// only reports its result when it finishes.
 	Log io.Writer
+}
+
+// rubberDuck reports whether the rubber duck request applies to the evaluator.
+func (o EvaluateOptions) rubberDuck() bool {
+	return o.RubberDuck && !o.Evaluator.IsClaude()
 }
 
 // NewSessionID returns a freshly generated, random Copilot CLI session ID, so
@@ -92,18 +109,19 @@ func Evaluate(ctx context.Context, opts EvaluateOptions, repoSlug string, prNumb
 		return nil, nil, fmt.Errorf("evaluation prompt is required")
 	}
 
-	prompt := buildPrompt(opts.Prompt, opts.Language, opts.RubberDuck, opts.LocalCheckout, repoSlug, prNumber, comment)
-	output, runErr := runCopilotCLI(ctx, opts, prompt)
-	usage := newUsage(opts, output)
+	prompt := buildPrompt(opts.Prompt, opts.Language, opts.rubberDuck(), opts.LocalCheckout, repoSlug, prNumber, comment)
+	run, runErr := runCLI(ctx, opts, prompt)
+	output, usage := run.Output, run.Usage
+	name := opts.Evaluator.DisplayName()
 
-	// The Copilot CLI can be killed (e.g. by Timeout) after it already printed
-	// its verdict, so a parseable result takes priority over a non-zero exit.
+	// The CLI can be killed (e.g. by Timeout) after it already printed its
+	// verdict, so a parseable result takes priority over a non-zero exit.
 	eval, parseErr := parseEvaluation(output)
 	if parseErr != nil {
 		if runErr != nil {
-			return nil, usage, fmt.Errorf("failed to run copilot CLI for comment %d: %w: %s", comment.CommentID, runErr, lastLines(output, 3))
+			return nil, usage, fmt.Errorf("failed to run %s for comment %d: %w: %s", name, comment.CommentID, runErr, lastLines(output, 3))
 		}
-		return nil, usage, fmt.Errorf("failed to parse copilot CLI output for comment %d: %w: %s", comment.CommentID, parseErr, lastLines(output, 3))
+		return nil, usage, fmt.Errorf("failed to parse %s output for comment %d: %w: %s", name, comment.CommentID, parseErr, lastLines(output, 3))
 	}
 	return eval, usage, nil
 }
@@ -121,12 +139,13 @@ func EvaluateBatch(ctx context.Context, opts EvaluateOptions, repoSlug string, p
 		return nil, nil, fmt.Errorf("at least one comment is required")
 	}
 
-	prompt := buildBatchPrompt(opts.Prompt, opts.Language, opts.RubberDuck, opts.LocalCheckout, repoSlug, prNumber, comments)
-	output, runErr := runCopilotCLI(ctx, opts, prompt)
-	usage := newUsage(opts, output)
+	prompt := buildBatchPrompt(opts.Prompt, opts.Language, opts.rubberDuck(), opts.LocalCheckout, repoSlug, prNumber, comments)
+	run, runErr := runCLI(ctx, opts, prompt)
+	output, usage := run.Output, run.Usage
+	name := opts.Evaluator.DisplayName()
 
-	// The Copilot CLI can be killed (e.g. by Timeout) after it already printed
-	// its verdicts, so a parseable result takes priority over a non-zero exit.
+	// The CLI can be killed (e.g. by Timeout) after it already printed its
+	// verdicts, so a parseable result takes priority over a non-zero exit.
 	evals, parseErr := parseBatchEvaluation(output)
 	if parseErr == nil && evaluatedCount(evals, comments) == 0 {
 		// A JSON array can appear anywhere in the CLI transcript, so one
@@ -135,9 +154,9 @@ func EvaluateBatch(ctx context.Context, opts EvaluateOptions, repoSlug string, p
 	}
 	if parseErr != nil {
 		if runErr != nil {
-			return nil, usage, fmt.Errorf("failed to run copilot CLI for batch evaluation: %w: %s", runErr, lastLines(output, 3))
+			return nil, usage, fmt.Errorf("failed to run %s for batch evaluation: %w: %s", name, runErr, lastLines(output, 3))
 		}
-		return nil, usage, fmt.Errorf("failed to parse copilot CLI batch output: %w: %s", parseErr, lastLines(output, 3))
+		return nil, usage, fmt.Errorf("failed to parse %s batch output: %w: %s", name, parseErr, lastLines(output, 3))
 	}
 	return evals, usage, nil
 }
@@ -153,12 +172,39 @@ func evaluatedCount(evals map[int64]*Evaluation, comments []*Comment) int {
 	return n
 }
 
-// runCopilotCLI invokes the Copilot CLI with prompt and opts, returning its
-// combined stdout/stderr regardless of whether the process succeeded.
-func runCopilotCLI(ctx context.Context, opts EvaluateOptions, prompt string) (string, error) {
+// cliRun is what one CLI invocation produced.
+type cliRun struct {
+	// Output is the text the verdict is parsed from and failures are explained
+	// with: the combined transcript for the Copilot CLI, and Claude Code's
+	// result text.
+	Output string
+	// Usage is nil when the CLI reported nothing worth surfacing.
+	Usage *Usage
+}
+
+// processOutput is what a finished CLI process wrote.
+type processOutput struct {
+	// Stdout is the combined stdout/stderr when the run merged them.
+	Stdout string
+	Stderr string
+}
+
+// runCLI invokes the evaluator's CLI with prompt and opts, returning its
+// output regardless of whether the process succeeded.
+func runCLI(ctx context.Context, opts EvaluateOptions, prompt string) (cliRun, error) {
+	if opts.Evaluator.IsClaude() {
+		return runClaudeCLI(ctx, opts, prompt)
+	}
+	out, err := runProcess(ctx, opts, buildArgs(opts, prompt), "", true)
+	return cliRun{Output: out.Stdout, Usage: newUsage(opts, out.Stdout)}, err
+}
+
+// runProcess executes the CLI with args, feeding stdin when non-empty. When
+// merge is true, stdout and stderr are captured as a single stream.
+func runProcess(ctx context.Context, opts EvaluateOptions, args []string, stdin string, merge bool) (processOutput, error) {
 	bin := opts.Bin
 	if bin == "" {
-		bin = "copilot"
+		bin = opts.Evaluator.DefaultBin()
 	}
 
 	runCtx := ctx
@@ -168,35 +214,46 @@ func runCopilotCLI(ctx context.Context, opts EvaluateOptions, prompt string) (st
 		defer cancel()
 	}
 
-	args := buildArgs(opts, prompt)
 	cmd := exec.CommandContext(runCtx, bin, args...)
-	// The copilot executable can be a shell wrapper that forks the real CLI, so
+	// The executable can be a shell wrapper that forks the real CLI, so
 	// signalling cmd alone would leave the CLI running past the timeout.
 	setProcessGroup(cmd)
 	cmd.Cancel = func() error { return killProcessGroup(cmd) }
 	// A process that survives the signal must not hold the output pipes, and
 	// therefore cmd.Run, open indefinitely.
 	cmd.WaitDelay = waitDelay
-
-	var buf bytes.Buffer
-	// Assign a single writer value to both Stdout and Stderr so os/exec detects
-	// they are the same writer and serializes the child's combined output
-	// through one goroutine. Two distinct io.MultiWriter values would each get
-	// their own copy goroutine and race on the shared buffer.
-	var out io.Writer = &buf
-	if opts.Log != nil {
-		out = io.MultiWriter(&buf, opts.Log)
+	if stdin != "" {
+		cmd.Stdin = strings.NewReader(stdin)
 	}
-	cmd.Stdout = out
-	cmd.Stderr = out
+
+	var stdout, stderr bytes.Buffer
+	var outW, errW io.Writer
+	if merge {
+		// Assign a single writer value to both Stdout and Stderr so os/exec
+		// detects they are the same writer and serializes the child's combined
+		// output through one goroutine. Two distinct io.MultiWriter values
+		// would each get their own copy goroutine and race on the shared buffer.
+		var w io.Writer = &stdout
+		if opts.Log != nil {
+			w = io.MultiWriter(&stdout, opts.Log)
+		}
+		outW, errW = w, w
+	} else {
+		outW, errW = &stdout, &stderr
+		if opts.Log != nil {
+			errW = io.MultiWriter(&stderr, opts.Log)
+		}
+	}
+	cmd.Stdout = outW
+	cmd.Stderr = errW
 	err := cmd.Run()
-	return buf.String(), err
+	return processOutput{Stdout: stdout.String(), Stderr: stderr.String()}, err
 }
 
 // buildArgs assembles the Copilot CLI invocation arguments. The Copilot
 // CLI's -p flag runs in non-interactive mode and never prompts for tool
 // permissions, regardless of whether stdin/stdout are attached to a
-// terminal: anything not pre-authorized via AllowAllTools or ExtraArgs is
+// terminal: anything not pre-authorized via AutoApprove or ExtraArgs is
 // simply denied.
 func buildArgs(opts EvaluateOptions, prompt string) []string {
 	args := []string{"-p", prompt, "--no-color", "--log-level", "none"}
@@ -209,7 +266,7 @@ func buildArgs(opts EvaluateOptions, prompt string) []string {
 	if opts.Model != "" {
 		args = append(args, "--model", opts.Model)
 	}
-	if opts.AllowAllTools {
+	if opts.AutoApprove {
 		args = append(args, "--allow-all-tools")
 	}
 	if opts.Sandbox {

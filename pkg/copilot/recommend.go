@@ -169,28 +169,9 @@ func recommendDirOptions(opts EvaluateOptions, calls []deniedCall, existing map[
 	granted := sandboxWorkingDir(opts)
 	var dirs []string
 	for _, c := range calls {
-		for _, segment := range splitShellSegments(joinBody(c.Body)) {
-			name, args := splitCommand(segment)
-			writes := writeCommands[name]
-			pendingRedirect := false
-			for _, arg := range args {
-				token, redirected := splitRedirect(arg)
-				if redirected && token == "" {
-					pendingRedirect = true
-					continue
-				}
-				redirected = redirected || pendingRedirect
-				pendingRedirect = false
-				dir := pathGrant(token)
-				if dir == "" || covers(granted, dir) {
-					continue
-				}
-				dirs = append(dirs, dir)
-				if writes || redirected {
-					writable = append(writable, dir)
-				}
-			}
-		}
+		d, w := callPathGrants(c, granted)
+		dirs = append(dirs, d...)
+		writable = append(writable, w...)
 	}
 	options = make([]string, 0, len(dirs))
 	for _, dir := range collapseDirs(dirs) {
@@ -199,6 +180,35 @@ func recommendDirOptions(opts EvaluateOptions, calls []deniedCall, existing map[
 		}
 	}
 	return options, collapseDirs(writable)
+}
+
+// callPathGrants returns the directories a denied call's shell command
+// arguments touch, dropping any covered by granted, along with the subset the
+// call was definitely going to write to.
+func callPathGrants(c deniedCall, granted string) (dirs []string, writable []string) {
+	for _, segment := range splitShellSegments(joinBody(c.Body)) {
+		name, args := splitCommand(segment)
+		writes := writeCommands[name]
+		pendingRedirect := false
+		for _, arg := range args {
+			token, redirected := splitRedirect(arg)
+			if redirected && token == "" {
+				pendingRedirect = true
+				continue
+			}
+			redirected = redirected || pendingRedirect
+			pendingRedirect = false
+			dir := pathGrant(token)
+			if dir == "" || covers(granted, dir) {
+				continue
+			}
+			dirs = append(dirs, dir)
+			if writes || redirected {
+				writable = append(writable, dir)
+			}
+		}
+	}
+	return dirs, writable
 }
 
 // splitRedirect strips the shell output redirection an argument can lead with,
@@ -328,7 +338,7 @@ func covers(parent, dir string) bool {
 // the "--opt=value" form the recommendations use.
 func existingOptions(opts EvaluateOptions) map[string]bool {
 	existing := make(map[string]bool, len(opts.ExtraArgs)+1)
-	if opts.AllowAllTools {
+	if opts.AutoApprove {
 		existing["--allow-all-tools"] = true
 	}
 	for i, arg := range opts.ExtraArgs {

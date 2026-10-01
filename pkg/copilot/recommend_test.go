@@ -58,7 +58,7 @@ func TestRecommendToolOptions(t *testing.T) {
 		},
 		{
 			name:  "allow all tools already in effect",
-			opts:  EvaluateOptions{AllowAllTools: true},
+			opts:  EvaluateOptions{AutoApprove: true},
 			calls: []deniedCall{denied("shell", "ls somewhere")},
 		},
 		{
@@ -160,7 +160,7 @@ func TestRecommendDirOptions(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.opts.AllowAllTools = true
+			tt.opts.AutoApprove = true
 			got, _ := recommendPermissions(tt.opts, tt.calls)
 			if len(got) == 0 && len(tt.want) == 0 {
 				return
@@ -207,7 +207,7 @@ func TestRecommendDirOptionsDetectsWrites(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, got := recommendPermissions(EvaluateOptions{AllowAllTools: true}, tt.calls)
+			_, got := recommendPermissions(EvaluateOptions{AutoApprove: true}, tt.calls)
 			if len(got) == 0 && len(tt.want) == 0 {
 				return
 			}
@@ -225,7 +225,7 @@ func TestNewUsageRecommendsOptionsForDeniedCalls(t *testing.T) {
 		"  └ Permission denied and could not request permission from user\n" +
 		"\nAI Credits 5 (1s)\n"
 
-	usage := newUsage(EvaluateOptions{AllowAllTools: true, Sandbox: true}, output)
+	usage := newUsage(EvaluateOptions{AutoApprove: true, Sandbox: true}, output)
 	if usage == nil {
 		t.Fatal("newUsage() = nil, want a usage")
 	}

@@ -65,6 +65,9 @@ type EvaluationResult struct {
 // the most recent evaluation covers every evaluation of that session.
 type Usage struct {
 	AICredits float64 `json:"ai_credits"`
+	// CostUSD is the estimated cost Claude Code reports for the session; it is
+	// zero for the Copilot CLI, which reports AICredits instead.
+	CostUSD float64 `json:"cost_usd,omitempty"`
 	// Denials lists tool calls the Copilot CLI denied, one entry per
 	// occurrence (not deduplicated). Unlike AICredits, denials are not
 	// reported cumulatively by the Copilot CLI and must be aggregated by callers.
