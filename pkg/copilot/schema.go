@@ -68,6 +68,11 @@ type Usage struct {
 	// CostUSD is the estimated cost Claude Code reports for the session; it is
 	// zero for the Copilot CLI, which reports AICredits instead.
 	CostUSD float64 `json:"cost_usd,omitempty"`
+	// InputTokens, OutputTokens and CachedTokens are comparable across CLIs:
+	// InputTokens includes CachedTokens (the cache-read part of the input).
+	InputTokens  int64 `json:"input_tokens,omitempty"`
+	OutputTokens int64 `json:"output_tokens,omitempty"`
+	CachedTokens int64 `json:"cached_tokens,omitempty"`
 	// Denials lists tool calls the Copilot CLI denied, one entry per
 	// occurrence (not deduplicated). Unlike AICredits, denials are not
 	// reported cumulatively by the Copilot CLI and must be aggregated by callers.

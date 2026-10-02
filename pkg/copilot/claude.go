@@ -49,7 +49,17 @@ type claudeResult struct {
 	IsError           bool           `json:"is_error"`
 	Result            string         `json:"result"`
 	TotalCostUSD      float64        `json:"total_cost_usd"`
+	Usage             claudeTokens   `json:"usage"`
 	PermissionDenials []claudeDenial `json:"permission_denials"`
+}
+
+// claudeTokens is the token usage of a Claude Code result; input_tokens
+// excludes the cache-read and cache-creation tokens, which are reported apart.
+type claudeTokens struct {
+	InputTokens         int64 `json:"input_tokens"`
+	OutputTokens        int64 `json:"output_tokens"`
+	CacheCreationTokens int64 `json:"cache_creation_input_tokens"`
+	CacheReadTokens     int64 `json:"cache_read_input_tokens"`
 }
 
 // buildClaudeArgs assembles the Claude Code invocation arguments. The prompt
@@ -285,10 +295,18 @@ func parseClaudeResult(stdout string) (*claudeResult, bool) {
 func newClaudeUsage(opts EvaluateOptions, res *claudeResult) *Usage {
 	calls := claudeDeniedCalls(res.PermissionDenials)
 	quotaExceeded := res.IsError && claudeQuotaPattern.MatchString(res.Result)
-	if res.TotalCostUSD == 0 && len(calls) == 0 && !quotaExceeded {
+	t := res.Usage
+	input := t.InputTokens + t.CacheCreationTokens + t.CacheReadTokens
+	if res.TotalCostUSD == 0 && input == 0 && t.OutputTokens == 0 && len(calls) == 0 && !quotaExceeded {
 		return nil
 	}
-	usage := &Usage{CostUSD: res.TotalCostUSD, QuotaExceeded: quotaExceeded}
+	usage := &Usage{
+		CostUSD:       res.TotalCostUSD,
+		InputTokens:   input,
+		OutputTokens:  t.OutputTokens,
+		CachedTokens:  t.CacheReadTokens,
+		QuotaExceeded: quotaExceeded,
+	}
 	usage.Denials = denialLabels(calls)
 	usage.Recommendations, usage.WritablePaths = recommendClaudePermissions(opts, calls)
 	return usage

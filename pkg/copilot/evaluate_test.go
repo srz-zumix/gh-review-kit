@@ -433,6 +433,30 @@ func TestParseUsage(t *testing.T) {
 	}
 }
 
+func TestParseUsageTokens(t *testing.T) {
+	tests := []struct {
+		name                  string
+		output                string
+		input, output2, cache int64
+	}{
+		{"arrows", "AI Credits 1 (1s)\nTokens     ↑ 25.6k • ↓ 1.2k • 20k (cached)\n", 25600, 1200, 20000},
+		{"ascii", "AI Credits 1 (1s)\nTokens     up 1.9m\n", 1900000, 0, 0},
+		{"words", "AI Credits 1 (1s)\nTokens     up 10 • down 2\n", 10, 2, 0},
+		{"absent", "AI Credits 1 (1s)\n", 0, 0, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			usage := parseUsage(tt.output)
+			if usage == nil {
+				t.Fatal("parseUsage() = nil, want usage")
+			}
+			if usage.InputTokens != tt.input || usage.OutputTokens != tt.output2 || usage.CachedTokens != tt.cache {
+				t.Errorf("tokens = %d/%d/%d, want %d/%d/%d", usage.InputTokens, usage.OutputTokens, usage.CachedTokens, tt.input, tt.output2, tt.cache)
+			}
+		})
+	}
+}
+
 func TestParseUsageNoFooter(t *testing.T) {
 	if usage := parseUsage("no usage footer here"); usage != nil {
 		t.Errorf("parseUsage() = %+v, want nil", usage)

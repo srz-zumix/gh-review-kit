@@ -29,6 +29,17 @@ func claudeResultJSON(t *testing.T, result string, cost float64, denials []claud
 	return string(b)
 }
 
+func TestNewClaudeUsageTokens(t *testing.T) {
+	res, ok := parseClaudeResult(`{"type":"result","result":"x","total_cost_usd":0.1,"usage":{"input_tokens":10,"output_tokens":5,"cache_creation_input_tokens":20,"cache_read_input_tokens":100}}`)
+	if !ok {
+		t.Fatal("parseClaudeResult() failed")
+	}
+	usage := newClaudeUsage(EvaluateOptions{}, res)
+	if usage == nil || usage.InputTokens != 130 || usage.OutputTokens != 5 || usage.CachedTokens != 100 {
+		t.Errorf("newClaudeUsage() = %+v, want input 130, output 5, cached 100", usage)
+	}
+}
+
 func TestBuildClaudeArgs(t *testing.T) {
 	tests := []struct {
 		name string

@@ -315,6 +315,9 @@ skip the check.`,
 				} else {
 					logger.Info("AI credits", "credits", usage.AICredits)
 				}
+				if usage.InputTokens > 0 || usage.OutputTokens > 0 {
+					logger.Info("Tokens", "input", usage.InputTokens, "output", usage.OutputTokens, "cached", usage.CachedTokens)
+				}
 				if usage.QuotaExceeded {
 					logger.Warn(name+" ran out of quota and stopped before finishing; any missing verdict is a consequence of that, not of the comment",
 						"hint", "wait for the quota to reset or upgrade the plan, then re-run")

@@ -93,6 +93,19 @@ var jsonArrayBlockPattern = regexp.MustCompile("(?s)```json\\s*(\\[.*?\\])\\s*``
 // footer, whose value may be abbreviated with a k/M suffix.
 var aiCreditsPattern = regexp.MustCompile(`AI Credits\s+([0-9][0-9,]*(?:\.[0-9]+)?)\s*([kKmM]?)`)
 
+// tokensLinePattern matches the "Tokens" line of the Copilot CLI usage footer,
+// e.g. "Tokens     ↑ 25.6k • ↓ 1.2k • 20k (cached)" ("up"/"down" when the
+// terminal has no arrows).
+var tokensLinePattern = regexp.MustCompile(`(?m)^\s*Tokens[ \t]+(.*)$`)
+
+const abbreviatedNumber = `([0-9][0-9,]*(?:\.[0-9]+)?)\s*([kKmM]?)`
+
+var (
+	tokensInputPattern  = regexp.MustCompile(`(?:↑\s*|\bup\s+)` + abbreviatedNumber)
+	tokensOutputPattern = regexp.MustCompile(`(?:↓\s*|\bdown\s+)` + abbreviatedNumber)
+	tokensCachedPattern = regexp.MustCompile(abbreviatedNumber + `\s*\(cached\)`)
+)
+
 // usageFooterPattern matches a line of the Copilot CLI usage footer, which is
 // printed on every run and so never explains a failure.
 var usageFooterPattern = regexp.MustCompile(`^(?:Changes|AI Credits|Tokens|Resume)\s`)
@@ -327,17 +340,44 @@ func parseUsage(output string) *Usage {
 		return nil
 	}
 	last := matches[len(matches)-1]
-	credits, err := strconv.ParseFloat(strings.ReplaceAll(last[1], ",", ""), 64)
-	if err != nil {
+	credits, ok := parseAbbreviated(last[1], last[2])
+	if !ok {
 		return nil
 	}
-	switch strings.ToLower(last[2]) {
-	case "k":
-		credits *= 1e3
-	case "m":
-		credits *= 1e6
+	usage := &Usage{AICredits: credits}
+	if lines := tokensLinePattern.FindAllStringSubmatch(output, -1); len(lines) > 0 {
+		line := lines[len(lines)-1][1]
+		usage.InputTokens = int64(matchAbbreviated(tokensInputPattern, line))
+		usage.OutputTokens = int64(matchAbbreviated(tokensOutputPattern, line))
+		usage.CachedTokens = int64(matchAbbreviated(tokensCachedPattern, line))
 	}
-	return &Usage{AICredits: credits}
+	return usage
+}
+
+// matchAbbreviated returns the first number pattern finds in s, or 0.
+func matchAbbreviated(pattern *regexp.Regexp, s string) float64 {
+	m := pattern.FindStringSubmatch(s)
+	if m == nil {
+		return 0
+	}
+	v, _ := parseAbbreviated(m[1], m[2])
+	return v
+}
+
+// parseAbbreviated converts a number with an optional k/M suffix and
+// thousand separators, as printed by the Copilot CLI.
+func parseAbbreviated(num, suffix string) (float64, bool) {
+	v, err := strconv.ParseFloat(strings.ReplaceAll(num, ",", ""), 64)
+	if err != nil {
+		return 0, false
+	}
+	switch strings.ToLower(suffix) {
+	case "k":
+		v *= 1e3
+	case "m":
+		v *= 1e6
+	}
+	return v, true
 }
 
 // lastLines returns the last n non-empty trimmed lines of s, joined by "; ",
