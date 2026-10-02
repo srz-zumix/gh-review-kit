@@ -557,9 +557,9 @@ func parseEvaluation(output string) (*Evaluation, error) {
 
 // batchEvaluation is one element of the JSON array parseBatchEvaluation expects.
 type batchEvaluation struct {
-	CommentID int64   `json:"comment_id"`
-	Verdict   Verdict `json:"verdict"`
-	Reason    string  `json:"reason"`
+	CommentID json.Number `json:"comment_id"` // accepts both 123 and "123"
+	Verdict   Verdict     `json:"verdict"`
+	Reason    string      `json:"reason"`
 }
 
 // parseBatchEvaluation extracts the last JSON array from the Copilot CLI
@@ -585,13 +585,17 @@ func parseBatchEvaluation(output string) (map[int64]*Evaluation, error) {
 
 	evals := make(map[int64]*Evaluation, len(items))
 	for _, item := range items {
-		if item.CommentID == 0 {
+		if item.CommentID == "" {
 			return nil, fmt.Errorf("evaluation array element is missing comment_id")
 		}
-		if err := validateVerdict(item.Verdict); err != nil {
-			return nil, fmt.Errorf("comment %d: %w", item.CommentID, err)
+		id, err := strconv.ParseInt(item.CommentID.String(), 10, 64)
+		if err != nil || id == 0 {
+			return nil, fmt.Errorf("evaluation array element has invalid comment_id %q", item.CommentID.String())
 		}
-		evals[item.CommentID] = &Evaluation{Verdict: item.Verdict, Reason: item.Reason}
+		if err := validateVerdict(item.Verdict); err != nil {
+			return nil, fmt.Errorf("comment %d: %w", id, err)
+		}
+		evals[id] = &Evaluation{Verdict: item.Verdict, Reason: item.Reason}
 	}
 	return evals, nil
 }

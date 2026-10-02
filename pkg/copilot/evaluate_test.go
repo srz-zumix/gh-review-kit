@@ -256,6 +256,17 @@ func TestParseBatchEvaluation(t *testing.T) {
 		}
 	})
 
+	t.Run("string comment_id", func(t *testing.T) {
+		output := "```json\n[{\"comment_id\": \"4162231744\", \"verdict\": \"valid\", \"reason\": \"ok\"}]\n```\n"
+		evals, err := parseBatchEvaluation(output)
+		if err != nil {
+			t.Fatalf("parseBatchEvaluation() error = %v", err)
+		}
+		if evals[4162231744] == nil {
+			t.Errorf("parseBatchEvaluation() = %+v, want evaluation for comment 4162231744", evals)
+		}
+	})
+
 	t.Run("invalid verdict", func(t *testing.T) {
 		output := "```json\n[{\"comment_id\": 1, \"verdict\": \"maybe\", \"reason\": \"?\"}]\n```\n"
 		if _, err := parseBatchEvaluation(output); err == nil {
