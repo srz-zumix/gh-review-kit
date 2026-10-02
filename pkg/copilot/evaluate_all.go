@@ -75,6 +75,9 @@ func evaluateAllSequential(ctx context.Context, opts EvaluateOptions, repoSlug s
 		}
 		res := &EvaluationResult{Comment: c}
 		eval, u, err := Evaluate(ctx, opts, repoSlug, prNumber, c)
+		// Claude Code rejects --session-id for a session that already exists, so
+		// every invocation after the first has to resume it.
+		opts.ResumeSession = true
 		if u != nil {
 			usage = u
 			res.Denials = u.Denials

@@ -31,6 +31,8 @@ type deniedCall struct {
 	Label string
 	Tool  string
 	Body  []string
+	// Paths are the file paths a Claude Code tool call was denied access to.
+	Paths []string
 }
 
 // detectDeniedCalls scans output for tool calls the Copilot CLI denied. It is
@@ -115,11 +117,18 @@ func SummarizeDenials(denials []string) []string {
 }
 
 // NeedsToolPermissionWarning reports whether an evaluation invocation is
-// likely to have tool calls denied because no permission was pre-authorized:
-// allowAllTools is false and extraArgs contains neither --allow-all-tools nor
-// --allow-tool (with or without an "=value" suffix).
-func NeedsToolPermissionWarning(allowAllTools bool, extraArgs []string) bool {
-	if allowAllTools {
+// likely to have tool calls denied because no permission was pre-authorized.
+// For the Copilot CLI, that is when autoApprove is false and extraArgs
+// contains neither --allow-all-tools nor --allow-tool (with or without an
+// "=value" suffix). For Claude Code, autoApprove selects auto mode, and
+// extraArgs must otherwise carry --allowedTools, --permission-mode auto or
+// bypassPermissions, or --dangerously-skip-permissions.
+func NeedsToolPermissionWarning(evaluator Evaluator, autoApprove bool, extraArgs []string) bool {
+	if evaluator.IsClaude() {
+		existing := existingClaudeOptions(EvaluateOptions{AutoApprove: autoApprove, ExtraArgs: extraArgs})
+		return !existing.auto && !existing.bypass && len(existing.rules) == 0
+	}
+	if autoApprove {
 		return false
 	}
 	for _, a := range extraArgs {

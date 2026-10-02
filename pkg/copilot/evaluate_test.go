@@ -61,7 +61,7 @@ func TestBuildArgs(t *testing.T) {
 		},
 		{
 			name: "allow all tools",
-			opts: EvaluateOptions{AllowAllTools: true},
+			opts: EvaluateOptions{AutoApprove: true},
 			want: []string{"-p", "prompt", "--no-color", "--log-level", "none", "--allow-all-tools"},
 		},
 		{
@@ -71,7 +71,7 @@ func TestBuildArgs(t *testing.T) {
 		},
 		{
 			name: "model and allow all tools before extra args",
-			opts: EvaluateOptions{Model: "gpt-5", AllowAllTools: true, ExtraArgs: []string{"--deny-tool", "shell(rm:*)"}},
+			opts: EvaluateOptions{Model: "gpt-5", AutoApprove: true, ExtraArgs: []string{"--deny-tool", "shell(rm:*)"}},
 			want: []string{"-p", "prompt", "--no-color", "--log-level", "none", "--model", "gpt-5", "--allow-all-tools", "--deny-tool", "shell(rm:*)"},
 		},
 		{
@@ -256,6 +256,17 @@ func TestParseBatchEvaluation(t *testing.T) {
 		}
 	})
 
+	t.Run("string comment_id", func(t *testing.T) {
+		output := "```json\n[{\"comment_id\": \"4162231744\", \"verdict\": \"valid\", \"reason\": \"ok\"}]\n```\n"
+		evals, err := parseBatchEvaluation(output)
+		if err != nil {
+			t.Fatalf("parseBatchEvaluation() error = %v", err)
+		}
+		if evals[4162231744] == nil {
+			t.Errorf("parseBatchEvaluation() = %+v, want evaluation for comment 4162231744", evals)
+		}
+	})
+
 	t.Run("invalid verdict", func(t *testing.T) {
 		output := "```json\n[{\"comment_id\": 1, \"verdict\": \"maybe\", \"reason\": \"?\"}]\n```\n"
 		if _, err := parseBatchEvaluation(output); err == nil {
@@ -342,7 +353,7 @@ func TestEvaluateBatchReportsRunErrorWhenNoVerdictMatches(t *testing.T) {
 	if err == nil {
 		t.Fatal("EvaluateBatch() error = nil, want the run error when no verdict covers the comments")
 	}
-	if !strings.Contains(err.Error(), "failed to run copilot CLI") {
+	if !strings.Contains(err.Error(), "failed to run Copilot CLI") {
 		t.Errorf("EvaluateBatch() error = %v, want it to report the run failure", err)
 	}
 }
@@ -379,10 +390,10 @@ func TestEvaluateReportsWhatFailedInsteadOfTheUsageFooter(t *testing.T) {
 	}
 }
 
-// TestRunCopilotCLITimeoutKillsForkedChild covers the copilot executable being a
+// TestRunCLITimeoutKillsForkedChild covers the copilot executable being a
 // shell wrapper that forks the real CLI: killing only the wrapper leaves the CLI
 // running past the timeout and holding the output pipes open.
-func TestRunCopilotCLITimeoutKillsForkedChild(t *testing.T) {
+func TestRunCLITimeoutKillsForkedChild(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("the wrapper script requires a POSIX shell")
 	}
@@ -393,17 +404,18 @@ func TestRunCopilotCLITimeoutKillsForkedChild(t *testing.T) {
 	}
 
 	start := time.Now()
-	output, err := runCopilotCLI(context.Background(), EvaluateOptions{Bin: path, Timeout: 200 * time.Millisecond}, "prompt")
+	run, err := runCLI(context.Background(), EvaluateOptions{Bin: path, Timeout: 200 * time.Millisecond}, "prompt")
 	elapsed := time.Since(start)
+	output := run.Output
 
 	if err == nil {
-		t.Fatal("runCopilotCLI() error = nil, want the timeout to be reported")
+		t.Fatal("runCLI() error = nil, want the timeout to be reported")
 	}
 	if elapsed > 3*time.Second {
-		t.Errorf("runCopilotCLI() returned after %v, want it to stop waiting once the process tree is killed", elapsed)
+		t.Errorf("runCLI() returned after %v, want it to stop waiting once the process tree is killed", elapsed)
 	}
 	if strings.Contains(output, "done") {
-		t.Errorf("runCopilotCLI() output = %q, want the forked child killed with the wrapper", output)
+		t.Errorf("runCLI() output = %q, want the forked child killed with the wrapper", output)
 	}
 }
 
@@ -427,6 +439,30 @@ func TestParseUsage(t *testing.T) {
 			}
 			if usage.AICredits != tt.want {
 				t.Errorf("AICredits = %v, want %v", usage.AICredits, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseUsageTokens(t *testing.T) {
+	tests := []struct {
+		name                  string
+		output                string
+		input, output2, cache int64
+	}{
+		{"arrows", "AI Credits 1 (1s)\nTokens     ↑ 25.6k • ↓ 1.2k • 20k (cached)\n", 25600, 1200, 20000},
+		{"ascii", "AI Credits 1 (1s)\nTokens     up 1.9m\n", 1900000, 0, 0},
+		{"words", "AI Credits 1 (1s)\nTokens     up 10 • down 2\n", 10, 2, 0},
+		{"absent", "AI Credits 1 (1s)\n", 0, 0, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			usage := parseUsage(tt.output)
+			if usage == nil {
+				t.Fatal("parseUsage() = nil, want usage")
+			}
+			if usage.InputTokens != tt.input || usage.OutputTokens != tt.output2 || usage.CachedTokens != tt.cache {
+				t.Errorf("tokens = %d/%d/%d, want %d/%d/%d", usage.InputTokens, usage.OutputTokens, usage.CachedTokens, tt.input, tt.output2, tt.cache)
 			}
 		})
 	}
