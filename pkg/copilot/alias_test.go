@@ -1,6 +1,7 @@
 package copilot
 
 import (
+	"fmt"
 	"os/exec"
 	"path/filepath"
 	"testing"
@@ -60,7 +61,7 @@ func TestCollectAliasFlags(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := CollectAliasFlags(fs, []string{"alias-set"}, []string{"prompt-file"})
+	got, err := CollectAliasFlags(fs, AliasFlagOptions{Skip: []string{"alias-set"}, PathFlags: []string{"prompt-file"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,5 +83,47 @@ func TestCollectAliasFlags(t *testing.T) {
 				t.Errorf("CollectAliasFlags()[%d].Values[%d] = %q, want %q", i, j, got[i].Values[j], want[i].Values[j])
 			}
 		}
+	}
+}
+
+func TestCollectAliasFlags_ExecPathAndRename(t *testing.T) {
+	fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	fs.String("bin", "", "")
+	fs.String("copilot-bin", "", "")
+	fs.Bool("auto-approve", false, "")
+	fs.Bool("allow-all-tools", false, "")
+	opts := AliasFlagOptions{
+		ExecPathFlags: []string{"bin", "copilot-bin"},
+		Rename:        map[string]string{"copilot-bin": "bin", "allow-all-tools": "auto-approve"},
+	}
+
+	if err := fs.Parse([]string{"--copilot-bin", "./tools/claude", "--allow-all-tools"}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := CollectAliasFlags(fs, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	abs, _ := filepath.Abs("./tools/claude")
+	want := []AliasFlag{
+		{Name: "auto-approve", Values: []string{"true"}},
+		{Name: "bin", Values: []string{abs}},
+	}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Errorf("CollectAliasFlags() = %v, want %v", got, want)
+	}
+
+	// A bare executable name stays bare so it is resolved through PATH.
+	fs2 := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	fs2.String("bin", "", "")
+	if err := fs2.Parse([]string{"--bin", "claude"}); err != nil {
+		t.Fatal(err)
+	}
+	got, err = CollectAliasFlags(fs2, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []AliasFlag{{Name: "bin", Values: []string{"claude"}}}; fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Errorf("CollectAliasFlags() = %v, want %v", got, want)
 	}
 }

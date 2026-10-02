@@ -29,30 +29,61 @@ func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
-// CollectAliasFlags returns the flags set on fs, in order, except those listed in skip.
-// Values of flags listed in pathFlags are made absolute so the alias works from any directory.
-func CollectAliasFlags(fs *pflag.FlagSet, skip, pathFlags []string) ([]AliasFlag, error) {
+// AliasFlagOptions controls how the flags set on a command are turned into alias flags.
+type AliasFlagOptions struct {
+	// Skip lists flags to leave out of the alias.
+	Skip []string
+	// PathFlags lists flags whose values are filesystem paths, made absolute so the alias works from any directory.
+	PathFlags []string
+	// ExecPathFlags lists flags whose values are an executable name or path: path-like values are made absolute,
+	// while bare names are preserved for PATH lookup.
+	ExecPathFlags []string
+	// Rename maps deprecated flag names to the replacement to embed in the alias instead.
+	Rename map[string]string
+}
+
+// CollectAliasFlags returns the flags set on fs, in order, normalized according to opts.
+func CollectAliasFlags(fs *pflag.FlagSet, opts AliasFlagOptions) ([]AliasFlag, error) {
 	var flags []AliasFlag
+	index := map[string]int{}
 	var err error
 	fs.Visit(func(f *pflag.Flag) {
-		if err != nil || slices.Contains(skip, f.Name) {
+		if err != nil || slices.Contains(opts.Skip, f.Name) {
 			return
 		}
 		values := []string{f.Value.String()}
 		if sv, ok := f.Value.(pflag.SliceValue); ok {
 			values = sv.GetSlice()
 		}
-		if slices.Contains(pathFlags, f.Name) {
-			for i, v := range values {
-				if values[i], err = filepath.Abs(v); err != nil {
-					err = fmt.Errorf("failed to resolve path of --%s '%s': %w", f.Name, v, err)
-					return
-				}
+		makeAbs := slices.Contains(opts.PathFlags, f.Name)
+		execPath := slices.Contains(opts.ExecPathFlags, f.Name)
+		for i, v := range values {
+			if !makeAbs && !(execPath && isPathLike(v)) {
+				continue
+			}
+			if values[i], err = filepath.Abs(v); err != nil {
+				err = fmt.Errorf("failed to resolve path of --%s '%s': %w", f.Name, v, err)
+				return
 			}
 		}
-		flags = append(flags, AliasFlag{Name: f.Name, Values: values})
+		name := f.Name
+		if replacement, ok := opts.Rename[name]; ok {
+			name = replacement
+		}
+		// A deprecated flag and its replacement resolve to the same name; the last one given wins.
+		if i, ok := index[name]; ok {
+			flags[i].Values = values
+			return
+		}
+		index[name] = len(flags)
+		flags = append(flags, AliasFlag{Name: name, Values: values})
 	})
 	return flags, err
+}
+
+// isPathLike reports whether v refers to an executable by path rather than by a bare name resolved through PATH.
+func isPathLike(v string) bool {
+	return strings.ContainsRune(v, '/') || strings.ContainsRune(v, filepath.Separator)
 }
 
 // BuildAliasExpansion builds the shell expansion of a gh alias that runs "copilot comments" with the given flags.

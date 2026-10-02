@@ -119,8 +119,9 @@ given (and any arguments after --) are embedded in a shell alias, so that
 "gh NAME [copilot|claude] [flags...]" runs this command with them. The
 evaluator given to --evaluate becomes the alias's default (copilot otherwise),
 and flags passed to the alias are appended, so they take precedence. A relative
---prompt-file is stored as an absolute path. An existing alias with the same
-name is overwritten.
+--prompt-file, and a --bin given as a path rather than a bare executable name,
+are stored as absolute paths. Deprecated flags are stored under their
+replacement name. An existing alias with the same name is overwritten.
 
 Use --evaluate=claude to judge comments with Claude Code instead of the
 Copilot CLI (--evaluate alone, or --evaluate=copilot, selects the Copilot CLI;
@@ -158,7 +159,12 @@ skip the check.`,
 				if err != nil {
 					return fmt.Errorf("invalid --evaluate value: %w", err)
 				}
-				aliasFlags, err := pkgcopilot.CollectAliasFlags(cmd.Flags(), []string{"alias-set", "evaluate"}, []string{"prompt-file"})
+				aliasFlags, err := pkgcopilot.CollectAliasFlags(cmd.Flags(), pkgcopilot.AliasFlagOptions{
+					Skip:          []string{"alias-set", "evaluate"},
+					PathFlags:     []string{"prompt-file"},
+					ExecPathFlags: []string{"bin", "copilot-bin"},
+					Rename:        deprecatedFlagReplacements,
+				})
 				if err != nil {
 					return fmt.Errorf("failed to collect flags for alias '%s': %w", aliasName, err)
 				}
