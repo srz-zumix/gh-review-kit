@@ -147,7 +147,8 @@ func deriveStatus(requested bool, lastReviewState string) Status {
 // isCopilotLogin reports whether login identifies the Copilot code review bot,
 // whose login is returned with or without the "[bot]" suffix depending on the API.
 func isCopilotLogin(login string) bool {
-	return strings.EqualFold(strings.TrimSuffix(login, "[bot]"), DefaultAuthor)
+	login = strings.TrimSuffix(strings.ToLower(login), "[bot]")
+	return login == DefaultAuthor || login == "copilot"
 }
 
 // IsCopilotRequested reports whether GitHub Copilot is currently a requested
