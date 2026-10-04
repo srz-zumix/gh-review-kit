@@ -7,6 +7,8 @@ description: End-to-end workflow that profiles a GitHub repository's review cult
 
 A complete, one-shot workflow for understanding a repository's review tendencies. When invoked, you (the agent) execute every step below until a Markdown deliverable is produced; you do not stop and ask the user mid-pipeline unless something fails. After the initial run, the user may issue follow-up instructions — handle them by re-using the already-built dataset whenever possible.
 
+For an overview of the extension and detailed command options, see the [README](../../README.md) and [command reference](../../docs/commands.md).
+
 ## When to Invoke
 
 Use this skill when the user asks anything like:

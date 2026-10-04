@@ -7,6 +7,8 @@ description: GitHub CLI extension (gh review-kit) for managing GitHub pull reque
 
 GitHub CLI extension for managing GitHub pull request reviews from the command line.
 
+Start with the [README](../../README.md) for a quick overview; use the [command reference](../../docs/commands.md) for complete usage, defaults, and examples.
+
 ## Prerequisites
 
 ### Installation
