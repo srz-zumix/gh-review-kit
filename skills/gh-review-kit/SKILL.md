@@ -7,6 +7,8 @@ description: GitHub CLI extension (gh review-kit) for managing GitHub pull reque
 
 GitHub CLI extension for managing GitHub pull request reviews from the command line.
 
+For Copilot review follow-up, `copilot comments --evaluate` judges feedback with the Copilot CLI or Claude Code and acts on verdicts: valid comments are resolved as `ADDRESSED`, invalid comments receive a thumbs-down and are resolved as `INVALID`, and unclear verdicts are left untouched. Supply `--prompt` or `--prompt-file`; use `--dryrun` to preview actions before applying them. Evaluation does not itself fix the code.
+
 Start with the [README](../../README.md) for a quick overview; use the [command reference](../../docs/commands.md) for complete usage, defaults, and examples.
 
 ## Prerequisites

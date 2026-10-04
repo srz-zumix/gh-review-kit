@@ -3,7 +3,7 @@
 Make GitHub pull request reviews easier to inspect, act on, and learn from with a `gh` extension.
 
 - **Find what needs attention:** filter PR checks, read failed check logs, and gather review feedback in one place.
-- **Keep reviews moving:** re-request reviews, mark generated files as viewed, and manage Copilot review comments and threads.
+- **Close the Copilot review loop:** evaluate review comments with an agent, automatically resolve addressed threads, and mark incorrect feedback with a thumbs-down and resolution. Re-request reviews and mark generated files as viewed, too.
 - **Learn from past reviews:** extract feedback into a reusable dataset, explore trends, and generate reports or candidate coding rules.
 - **Trace media back to its source:** embed and inspect Git provenance in videos and images.
 
@@ -88,7 +88,11 @@ Combine review bodies, inline comments, and issue comments; filter by type or pa
 gh review-kit copilot comments [flags]
 ```
 
-List Copilot feedback, including resolved or outdated threads when requested; optionally evaluate it using Copilot CLI or Claude Code. Without `--pr`, use the current branch's PR.
+List Copilot feedback, including resolved or outdated threads when requested. With `--evaluate` and a required `--prompt` or `--prompt-file`, the Copilot CLI (or Claude Code via `--evaluate=claude`) judges each comment against the PR: valid comments are resolved as `ADDRESSED`, invalid comments receive a thumbs-down and are resolved as `INVALID`, and unclear verdicts trigger no action. This streamlines closing out Copilot review feedback after handling fixes; it does not itself fix the code. Use `--dryrun` to preview actions before applying them. Without `--pr`, use the current branch's PR. See the [Copilot comments reference](docs/commands.md#list-copilot-code-review-comments-on-a-pull-request) for evaluation options and permissions.
+
+```sh
+gh review-kit copilot comments --evaluate --prompt "Judge each review comment against the current code." --dryrun -- --allow-tool=read
+```
 
 #### React to review comments
 
