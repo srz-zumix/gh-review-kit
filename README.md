@@ -210,7 +210,11 @@ Mark specified files as viewed, or (by default) all linguist-generated files; `-
 
 ## Agent Skills
 
-Use `gh review-kit skills` to install and manage bundled agent skills. See [skillsmith](https://github.com/Songmu/skillsmith) for details.
+```sh
+gh review-kit skills [subcommand] [args...]
+```
+
+Install and manage bundled agent skills; the subcommand and its arguments are optional. See [skillsmith](https://github.com/Songmu/skillsmith) for details.
 
 ## Global Options
 
