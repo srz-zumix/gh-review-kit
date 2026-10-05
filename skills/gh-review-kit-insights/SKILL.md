@@ -7,6 +7,8 @@ description: Build and analyze normalized datasets of GitHub pull request review
 
 `gh review-kit insights` is a self-contained pipeline for turning GitHub pull request review feedback (review bodies, inline review comments, and PR issue comments) into a normalized JSONL dataset and analyzing it at scale. This skill covers only the `insights` subcommand family. For check-run / re-request workflows see the `gh-review-kit` skill.
 
+For a short overview, see the [README](../../README.md); for complete command usage and defaults, see the [command reference](../../docs/commands.md).
+
 ## Prerequisites
 
 ```bash
