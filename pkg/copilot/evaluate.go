@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -139,6 +140,11 @@ func Evaluate(ctx context.Context, opts EvaluateOptions, repoSlug string, prNumb
 	return eval, usage, nil
 }
 
+// ErrNoVerdicts reports that the CLI output parsed cleanly but covered none of
+// the requested comments, so every comment is missing rather than the run
+// having failed. Callers can recover from it by asking for the verdicts again.
+var ErrNoVerdicts = errors.New("no JSON array of verdicts found in output")
+
 // EvaluateBatch runs the Copilot CLI once to judge every comment together,
 // returning one Evaluation per comment_id the Copilot CLI reported; comments
 // it did not report on are absent and duplicate IDs have nil evaluations. The returned
@@ -163,7 +169,7 @@ func EvaluateBatch(ctx context.Context, opts EvaluateOptions, repoSlug string, p
 	if parseErr == nil && evaluatedCount(evals, comments) == 0 {
 		// A JSON array can appear anywhere in the CLI transcript, so one
 		// covering none of the comments is not the verdict list.
-		parseErr = fmt.Errorf("no JSON array of verdicts found in output")
+		parseErr = ErrNoVerdicts
 	}
 	if parseErr != nil {
 		if runErr != nil {
