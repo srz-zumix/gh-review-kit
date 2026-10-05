@@ -95,6 +95,11 @@ different model, so this adds latency and model usage.
 Every comment is judged with a single Copilot CLI invocation, which avoids
 repeated context and keeps AI credits down at the cost of a single combined
 judgement pass. Use --batch=false to run one invocation per comment instead.
+Missing or duplicate comment IDs are retried once in the same session, for
+only the affected comments. The retry asks for corrected JSON judgements
+without repeating fixes or tool calls. Successful judgements are preserved;
+remaining failures are reported per comment. No retry runs after cancellation
+or a reported quota limit.
 
 Each run starts a new Copilot CLI session, so runs never inherit each other's
 context. The session ID is written to stderr both before and after the

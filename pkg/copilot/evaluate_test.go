@@ -234,6 +234,17 @@ func TestBuildBatchPrompt(t *testing.T) {
 }
 
 func TestParseBatchEvaluation(t *testing.T) {
+	t.Run("duplicate ids are never accepted", func(t *testing.T) {
+		output := `[{"comment_id":1,"verdict":"valid","reason":"first"},{"comment_id":2,"verdict":"invalid","reason":"keep"},{"comment_id":1,"verdict":"invalid","reason":"second"},{"comment_id":1,"verdict":"valid","reason":"third"}]`
+		evals, err := parseBatchEvaluation(output)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if evals[1] != nil || evals[2] == nil || evals[2].Reason != "keep" {
+			t.Fatalf("parseBatchEvaluation() = %+v, want duplicate rejected and unique verdict preserved", evals)
+		}
+	})
+
 	t.Run("normal", func(t *testing.T) {
 		output := "```json\n[{\"comment_id\": 1, \"verdict\": \"valid\", \"reason\": \"ok\"}, {\"comment_id\": 2, \"verdict\": \"invalid\", \"reason\": \"no\"}]\n```\n"
 		evals, err := parseBatchEvaluation(output)
@@ -355,6 +366,21 @@ func TestEvaluateBatchReportsRunErrorWhenNoVerdictMatches(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "failed to run Copilot CLI") {
 		t.Errorf("EvaluateBatch() error = %v, want it to report the run failure", err)
+	}
+}
+
+func TestEvaluateBatchReturnsDuplicateIDsForRecovery(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fakeCopilotBin requires a POSIX shell")
+	}
+	output := `[{"comment_id":1,"verdict":"valid","reason":"first"},{"comment_id":1,"verdict":"invalid","reason":"second"}]`
+	opts := EvaluateOptions{Bin: fakeCopilotBin(t, output, 0), Prompt: "judge"}
+	evals, _, err := EvaluateBatch(context.Background(), opts, "owner/repo", 1, []*Comment{{CommentID: 1}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if eval, exists := evals[1]; !exists || eval != nil {
+		t.Fatalf("evals = %+v, want duplicate ID marked for recovery", evals)
 	}
 }
 

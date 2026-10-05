@@ -343,6 +343,8 @@ Use `--model` to select the Copilot CLI model used for evaluation, and `--rubber
 
 Every comment is judged with a single Copilot CLI invocation, which avoids repeated context and keeps AI credits down at the cost of a single combined judgement pass. Use `--batch=false` to run one invocation per comment instead.
 
+Missing or duplicate comment IDs are retried once in the same session, for only the affected comments. The retry asks for corrected JSON judgements without repeating fixes or tool calls. Successful judgements are preserved; remaining failures are reported per comment. No retry runs after cancellation or a reported quota limit.
+
 Each run starts a new Copilot CLI session, so runs never inherit each other's context. The session ID is written to stderr both before and after the evaluation, along with the Copilot CLI output and the AI credits the session consumed. Pass that ID back with `--session-id` to resume the session, for example to keep the context of a previous run.
 
 Use `--sandbox` to enable the Copilot CLI's OS-level shell sandbox for the evaluation. This also passes `--experimental`, since the Copilot CLI otherwise ignores `--sandbox`, and `--add-dir` for the directory the command runs in, since the sandbox otherwise blocks reading the checked-out repository. When paths are recommended, a `~/.copilot/settings.json` fragment granting them under `sandbox.userPolicy.filesystem.readonlyPaths` is printed as well, so the grant can be made permanent instead of repeated on every run; the Copilot CLI reads repository settings (`.github/copilot/settings.json` and `settings.local.json`) only in interactive mode, so they have no effect here.

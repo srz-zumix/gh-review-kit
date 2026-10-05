@@ -141,7 +141,7 @@ func Evaluate(ctx context.Context, opts EvaluateOptions, repoSlug string, prNumb
 
 // EvaluateBatch runs the Copilot CLI once to judge every comment together,
 // returning one Evaluation per comment_id the Copilot CLI reported; comments
-// it did not report on are simply absent from the returned map. The returned
+// it did not report on are absent and duplicate IDs have nil evaluations. The returned
 // Usage is the session total reported by the Copilot CLI, and may be
 // non-nil even when an error is returned.
 func EvaluateBatch(ctx context.Context, opts EvaluateOptions, repoSlug string, prNumber int, comments []*Comment) (map[int64]*Evaluation, *Usage, error) {
@@ -174,7 +174,7 @@ func EvaluateBatch(ctx context.Context, opts EvaluateOptions, repoSlug string, p
 	return evals, usage, nil
 }
 
-// evaluatedCount returns how many of comments evals holds a verdict for.
+// evaluatedCount returns how many requested IDs occur in evals, including duplicates.
 func evaluatedCount(evals map[int64]*Evaluation, comments []*Comment) int {
 	n := 0
 	for _, c := range comments {
@@ -513,6 +513,7 @@ func buildBatchPrompt(userPrompt string, language string, rubberDuck bool, check
 	}
 	b.WriteString("After completing the task above, output your final judgement for every comment listed, as the last thing you print, as a single fenced JSON code block containing an array with exactly these keys per element:\n")
 	b.WriteString("```json\n[{\"comment_id\": 123, \"verdict\": \"valid|invalid|unclear\", \"reason\": \"...\"}]\n```\n")
+	b.WriteString("Include each listed comment_id exactly once, with no other IDs. Verify the IDs before responding. Put all corrections in the JSON array and do not print anything after the JSON block.\n")
 	if language != "" {
 		b.WriteString(fmt.Sprintf("Write each \"reason\" value in %s.\n", language))
 	}
@@ -594,6 +595,10 @@ func parseBatchEvaluation(output string) (map[int64]*Evaluation, error) {
 		}
 		if err := validateVerdict(item.Verdict); err != nil {
 			return nil, fmt.Errorf("comment %d: %w", id, err)
+		}
+		if _, exists := evals[id]; exists {
+			evals[id] = nil
+			continue
 		}
 		evals[id] = &Evaluation{Verdict: item.Verdict, Reason: item.Reason}
 	}

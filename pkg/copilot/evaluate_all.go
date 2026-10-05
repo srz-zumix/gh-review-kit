@@ -117,6 +117,10 @@ func appendUnique(dst []string, values []string) []string {
 
 // evaluateAllBatch runs a single Copilot CLI invocation covering every comment.
 func evaluateAllBatch(ctx context.Context, opts EvaluateOptions, repoSlug string, prNumber int, comments []*Comment) ([]*EvaluationResult, *Usage) {
+	if opts.SessionID == "" {
+		opts.SessionID = NewSessionID()
+	}
+	perCommentTimeout := opts.Timeout
 	opts.Timeout = batchTimeout(opts.Timeout, len(comments))
 	if opts.Log != nil {
 		fmt.Fprintf(opts.Log, "\n--- evaluating %d comments in a single batch (timeout %s) ---\n", len(comments), opts.Timeout)
@@ -129,7 +133,46 @@ func evaluateAllBatch(ctx context.Context, opts EvaluateOptions, repoSlug string
 		}
 		return withDenials(results, usage), usage
 	}
-	return withDenials(assignBatchResults(comments, evals), usage), usage
+	results := assignBatchResults(comments, evals)
+	var pending []*Comment
+	for _, res := range results {
+		if res.Evaluation == nil {
+			pending = append(pending, res.Comment)
+		}
+	}
+	if len(pending) == 0 || ctx.Err() != nil || (usage != nil && usage.QuotaExceeded) {
+		return withDenials(results, usage), usage
+	}
+
+	opts.ResumeSession = true
+	opts.Timeout = batchTimeout(perCommentTimeout, len(pending))
+	opts.RubberDuck = false
+	opts.Prompt = "Your previous batch response had missing or duplicate comment IDs. Recover the judgements for only the comments listed below from the work already completed in this session. Do not edit files, run tools, or repeat fixes. Return each listed comment_id exactly once with its verdict and reason in the final JSON array. If a judgement cannot be recovered confidently, use unclear and explain why. Do not include any other comment IDs or corrections outside the JSON block."
+	if opts.Log != nil {
+		fmt.Fprintf(opts.Log, "\n--- recovering evaluations for %d missing or duplicate comments (timeout %s) ---\n", len(pending), opts.Timeout)
+	}
+	recovered, retryUsage, retryErr := EvaluateBatch(ctx, opts, repoSlug, prNumber, pending)
+	if retryUsage != nil {
+		if usage != nil {
+			retryUsage.Denials = append(usage.Denials, retryUsage.Denials...)
+			retryUsage.Recommendations = appendUnique(usage.Recommendations, retryUsage.Recommendations)
+			retryUsage.WritablePaths = appendUnique(usage.WritablePaths, retryUsage.WritablePaths)
+			retryUsage.QuotaExceeded = usage.QuotaExceeded || retryUsage.QuotaExceeded
+		}
+		usage = retryUsage
+	}
+	for _, res := range results {
+		if res.Evaluation != nil {
+			continue
+		}
+		if retryErr != nil {
+			res.Error = fmt.Sprintf("%s; recovery failed: %v", res.Error, retryErr)
+		} else if eval := recovered[res.Comment.CommentID]; eval != nil {
+			res.Evaluation = eval
+			res.Error = ""
+		}
+	}
+	return withDenials(results, usage), usage
 }
 
 // batchTimeout scales a per-comment timeout to the single invocation that
@@ -161,8 +204,10 @@ func assignBatchResults(comments []*Comment, evals map[int64]*Evaluation) []*Eva
 	results := make([]*EvaluationResult, len(comments))
 	for i, c := range comments {
 		res := &EvaluationResult{Comment: c}
-		if eval, ok := evals[c.CommentID]; ok {
+		if eval, ok := evals[c.CommentID]; ok && eval != nil {
 			res.Evaluation = eval
+		} else if ok {
+			res.Error = fmt.Sprintf("duplicate evaluations returned for comment %d", c.CommentID)
 		} else {
 			res.Error = fmt.Sprintf("no evaluation returned for comment %d", c.CommentID)
 		}
