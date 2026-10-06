@@ -72,7 +72,7 @@ func TestEvaluateAllBatchRecovery(t *testing.T) {
 				if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
 					t.Fatal(err)
 				}
-				opts := EvaluateOptions{Evaluator: evaluator, Bin: path, Prompt: "judge and fix", SessionID: "session-1", Timeout: time.Second}
+				opts := EvaluateOptions{Evaluator: evaluator, Bin: path, Prompt: "judge and fix", SessionID: "session-1", Timeout: time.Second, AutoApprove: true}
 				comments := []*Comment{{CommentID: 1}, {CommentID: 2}, {CommentID: 3}}
 				results, usage := evaluateAllBatch(context.Background(), opts, "owner/repo", 1, comments)
 				wantReason := tt.wantReason
@@ -116,6 +116,22 @@ func TestEvaluateAllBatchRecovery(t *testing.T) {
 				}
 				if !strings.Contains(string(args), sessionFlag+"\nsession-1\n") {
 					t.Fatalf("recovery did not continue session: %s", args)
+				}
+				// The first pass keeps its permissions; the recovery must not
+				// run tools whatever that pass was granted.
+				first, err := os.ReadFile(filepath.Join(dir, "first-args"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				grant, restriction := "--allow-all-tools\n", "--deny-tool=shell,write,url,memory\n"
+				if evaluator.IsClaude() {
+					grant, restriction = "--permission-mode\nauto\n", "--disallowedTools=*\n"
+				}
+				if !strings.Contains(string(first), grant) || strings.Contains(string(first), restriction) {
+					t.Fatalf("unexpected first-pass permissions: %s", first)
+				}
+				if strings.Contains(string(args), grant) || !strings.Contains(string(args), restriction) {
+					t.Fatalf("recovery was not restricted at the CLI level: %s", args)
 				}
 				// Comment 1 was judged by the first batch unless that batch
 				// covered nothing, so it is only re-sent in the all-missing case.

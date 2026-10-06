@@ -155,6 +155,9 @@ func evaluateAllBatch(ctx context.Context, opts EvaluateOptions, repoSlug string
 	opts.ResumeSession = true
 	opts.Timeout = batchTimeout(perCommentTimeout, len(pending))
 	opts.RubberDuck = false
+	// The first pass may already have applied fixes, so the recovery must not
+	// act on the repository whatever permissions that pass was granted.
+	opts.ReadOnly = true
 	opts.Prompt = "Your previous batch response had missing or duplicate comment IDs. Recover the judgements for only the comments listed below from the work already completed in this session. Do not edit files, run tools, or repeat fixes. Return each listed comment_id exactly once with its verdict and reason in the final JSON array. If a judgement cannot be recovered confidently, use unclear and explain why. Do not include any other comment IDs or corrections outside the JSON block."
 	if opts.Log != nil {
 		fmt.Fprintf(opts.Log, "\n--- recovering evaluations for %d missing or duplicate comments (timeout %s) ---\n", len(pending), opts.Timeout)

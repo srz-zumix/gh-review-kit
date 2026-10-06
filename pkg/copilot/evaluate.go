@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -56,6 +57,14 @@ type EvaluateOptions struct {
 	// ResumeSession, for Claude Code, resumes SessionID with --resume instead of
 	// creating it with --session-id, which rejects an ID that already exists.
 	ResumeSession bool
+	// ReadOnly, when true, restricts the evaluation to reading at the CLI
+	// level, for invocations that must not act on the repository: AutoApprove
+	// is ignored, and deny rules that hold over any allow rule, including those
+	// passed through ExtraArgs, are added. The Copilot CLI is limited to the
+	// view, grep and glob tools, with shell, write, url and memory denied and
+	// its built-in MCP servers disabled; Claude Code has every tool denied. No
+	// permission recommendations are made for the denials it causes.
+	ReadOnly bool
 	// Sandbox, when true, passes --sandbox to enable the Copilot CLI's OS-level
 	// shell sandbox for the evaluation. The Copilot CLI ignores --sandbox unless
 	// --experimental is also passed, so --experimental is added automatically,
@@ -289,7 +298,7 @@ func buildArgs(opts EvaluateOptions, prompt string) []string {
 	if opts.Model != "" {
 		args = append(args, "--model", opts.Model)
 	}
-	if opts.AutoApprove {
+	if opts.AutoApprove && !opts.ReadOnly {
 		args = append(args, "--allow-all-tools")
 	}
 	if opts.Sandbox {
@@ -300,8 +309,34 @@ func buildArgs(opts EvaluateOptions, prompt string) []string {
 	if dir := sandboxWorkingDir(opts); dir != "" {
 		args = append(args, "--add-dir", dir)
 	}
+	if opts.ReadOnly {
+		return appendRestrictions(args, opts.ExtraArgs, copilotReadOnlyArgs)
+	}
 	args = append(args, opts.ExtraArgs...)
 	return args
+}
+
+// copilotReadOnlyArgs restricts the Copilot CLI to reading for ReadOnly. Deny
+// rules take precedence over allow rules, even --allow-all, so passthrough
+// options cannot lift them.
+var copilotReadOnlyArgs = []string{
+	"--available-tools=view,grep,glob",
+	"--deny-tool=shell,write,url,memory",
+	"--disable-builtin-mcps",
+}
+
+// appendRestrictions appends extraArgs followed by restrictions to args, so
+// that restrictions win over options that take the last occurrence. They are
+// placed before a "--" in extraArgs, which would otherwise make the CLI read
+// them as positional arguments.
+func appendRestrictions(args []string, extraArgs []string, restrictions []string) []string {
+	end := slices.Index(extraArgs, "--")
+	if end < 0 {
+		end = len(extraArgs)
+	}
+	args = append(args, extraArgs[:end]...)
+	args = append(args, restrictions...)
+	return append(args, extraArgs[end:]...)
 }
 
 // sandboxWorkingDir returns the directory the evaluation runs in, which the
@@ -333,7 +368,9 @@ func newUsage(opts EvaluateOptions, output string) *Usage {
 		usage = &Usage{}
 	}
 	usage.Denials = denialLabels(calls)
-	usage.Recommendations, usage.WritablePaths = recommendPermissions(opts, calls)
+	if !opts.ReadOnly {
+		usage.Recommendations, usage.WritablePaths = recommendPermissions(opts, calls)
+	}
 	usage.QuotaExceeded = quotaExceeded
 	return usage
 }

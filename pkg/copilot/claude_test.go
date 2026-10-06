@@ -81,6 +81,16 @@ func TestBuildClaudeArgs(t *testing.T) {
 			opts: EvaluateOptions{AutoApprove: true, ExtraArgs: []string{"--allowedTools", "Bash(git *)"}},
 			want: []string{"-p", "--output-format", "stream-json", "--verbose", "--permission-mode", "auto", "--allowedTools", "Bash(git *)"},
 		},
+		{
+			name: "read only overrides auto approve and extra args",
+			opts: EvaluateOptions{AutoApprove: true, ReadOnly: true, ExtraArgs: []string{"--dangerously-skip-permissions", "--permission-mode", "bypassPermissions", "--allowedTools", "Bash(git *)"}},
+			want: []string{"-p", "--output-format", "stream-json", "--verbose", "--dangerously-skip-permissions", "--permission-mode", "bypassPermissions", "--allowedTools", "Bash(git *)", "--disallowedTools=*", "--permission-mode", "dontAsk"},
+		},
+		{
+			name: "read only restrictions precede option terminator",
+			opts: EvaluateOptions{ReadOnly: true, ExtraArgs: []string{"--permission-mode=auto", "--", "positional"}},
+			want: []string{"-p", "--output-format", "stream-json", "--verbose", "--permission-mode=auto", "--disallowedTools=*", "--permission-mode", "dontAsk", "--", "positional"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

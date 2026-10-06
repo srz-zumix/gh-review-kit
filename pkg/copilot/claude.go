@@ -81,14 +81,27 @@ func buildClaudeArgs(opts EvaluateOptions) []string {
 	if opts.Model != "" {
 		args = append(args, "--model", opts.Model)
 	}
-	if opts.AutoApprove {
+	if opts.AutoApprove && !opts.ReadOnly {
 		args = append(args, "--permission-mode", "auto")
 	}
 	if opts.Sandbox {
 		args = append(args, "--settings", claudeSandboxSettings)
 	}
+	if opts.ReadOnly {
+		return appendRestrictions(args, opts.ExtraArgs, claudeReadOnlyArgs)
+	}
 	args = append(args, opts.ExtraArgs...)
 	return args
+}
+
+// claudeReadOnlyArgs denies Claude Code every tool for ReadOnly. A bare "*"
+// deny rule removes every tool from the model's context, and explicit deny
+// rules hold over allow rules and every permission mode, including
+// bypassPermissions; the trailing --permission-mode overrides an earlier one
+// passed through ExtraArgs so nothing is auto-approved either.
+var claudeReadOnlyArgs = []string{
+	"--disallowedTools=*",
+	"--permission-mode", "dontAsk",
 }
 
 // runClaudeCLI invokes Claude Code with prompt and opts. Its stdout is a stream
@@ -308,7 +321,9 @@ func newClaudeUsage(opts EvaluateOptions, res *claudeResult) *Usage {
 		QuotaExceeded: quotaExceeded,
 	}
 	usage.Denials = denialLabels(calls)
-	usage.Recommendations, usage.WritablePaths = recommendClaudePermissions(opts, calls)
+	if !opts.ReadOnly {
+		usage.Recommendations, usage.WritablePaths = recommendClaudePermissions(opts, calls)
+	}
 	return usage
 }
 

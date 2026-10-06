@@ -79,6 +79,16 @@ func TestBuildArgs(t *testing.T) {
 			opts: EvaluateOptions{RubberDuck: true},
 			want: []string{"-p", "prompt", "--no-color", "--log-level", "none"},
 		},
+		{
+			name: "read only overrides auto approve and extra args",
+			opts: EvaluateOptions{AutoApprove: true, ReadOnly: true, ExtraArgs: []string{"--allow-all", "--allow-tool", "shell(git:*)"}},
+			want: []string{"-p", "prompt", "--no-color", "--log-level", "none", "--allow-all", "--allow-tool", "shell(git:*)", "--available-tools=view,grep,glob", "--deny-tool=shell,write,url,memory", "--disable-builtin-mcps"},
+		},
+		{
+			name: "read only restrictions precede option terminator",
+			opts: EvaluateOptions{ReadOnly: true, ExtraArgs: []string{"--yolo", "--", "positional"}},
+			want: []string{"-p", "prompt", "--no-color", "--log-level", "none", "--yolo", "--available-tools=view,grep,glob", "--deny-tool=shell,write,url,memory", "--disable-builtin-mcps", "--", "positional"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
