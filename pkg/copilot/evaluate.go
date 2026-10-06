@@ -143,7 +143,7 @@ func Evaluate(ctx context.Context, opts EvaluateOptions, repoSlug string, prNumb
 // ErrNoVerdicts reports that the CLI output parsed cleanly but covered none of
 // the requested comments, so every comment is missing rather than the run
 // having failed. Callers can recover from it by asking for the verdicts again.
-var ErrNoVerdicts = errors.New("no JSON array of verdicts found in output")
+var ErrNoVerdicts = errors.New("no verdicts for the requested comments found in output")
 
 // EvaluateBatch runs the Copilot CLI once to judge every comment together,
 // returning one Evaluation per comment_id the Copilot CLI reported; comments
