@@ -250,10 +250,27 @@ func TestParseBatchEvaluation(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if evals[1] != nil || evals[2] == nil || evals[2].Reason != "keep" {
+		if v, ok := evals[1]; !ok || v != nil || evals[2] == nil || evals[2].Reason != "keep" {
 			t.Fatalf("parseBatchEvaluation() = %+v, want duplicate rejected and unique verdict preserved", evals)
 		}
 	})
+	for _, tt := range []struct {
+		name   string
+		output string
+	}{
+		{"duplicate with invalid later verdict stays recoverable", `[{"comment_id":1,"verdict":"valid","reason":"first"},{"comment_id":2,"verdict":"invalid","reason":"keep"},{"comment_id":1,"verdict":"bogus","reason":"second"}]`},
+		{"duplicate with invalid first verdict stays recoverable", `[{"comment_id":1,"verdict":"bogus","reason":"first"},{"comment_id":2,"verdict":"invalid","reason":"keep"},{"comment_id":1,"verdict":"valid","reason":"second"}]`},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			evals, err := parseBatchEvaluation(tt.output)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if v, ok := evals[1]; !ok || v != nil || evals[2] == nil || evals[2].Reason != "keep" {
+				t.Fatalf("parseBatchEvaluation() = %+v, want duplicate marked nil and unique verdict preserved", evals)
+			}
+		})
+	}
 
 	t.Run("normal", func(t *testing.T) {
 		output := "```json\n[{\"comment_id\": 1, \"verdict\": \"valid\", \"reason\": \"ok\"}, {\"comment_id\": 2, \"verdict\": \"invalid\", \"reason\": \"no\"}]\n```\n"

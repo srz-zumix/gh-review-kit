@@ -99,8 +99,8 @@ Missing or duplicate comment IDs are retried once in the same session, for
 only the affected comments. The retry asks for corrected JSON judgements
 without repeating fixes, and runs without tool permissions whatever
 --auto-approve or passthrough options grant: the Copilot CLI is limited to
-read-only tools with shell, write, URL and memory access denied, and Claude
-Code has every tool denied. Successful judgements are preserved;
+the view, grep and glob tools with built-in MCP servers disabled and shell,
+write, URL and memory access denied, and Claude Code has every tool denied. Successful judgements are preserved;
 remaining failures are reported per comment. No retry runs after cancellation
 or a reported quota limit.
 

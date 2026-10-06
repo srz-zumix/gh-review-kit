@@ -627,8 +627,9 @@ func parseBatchEvaluation(output string) (map[int64]*Evaluation, error) {
 		return nil, fmt.Errorf("invalid JSON evaluation array: %w", err)
 	}
 
-	evals := make(map[int64]*Evaluation, len(items))
-	for _, item := range items {
+	ids := make([]int64, len(items))
+	counts := make(map[int64]int, len(items))
+	for i, item := range items {
 		if item.CommentID == "" {
 			return nil, fmt.Errorf("evaluation array element is missing comment_id")
 		}
@@ -636,12 +637,22 @@ func parseBatchEvaluation(output string) (map[int64]*Evaluation, error) {
 		if err != nil || id == 0 {
 			return nil, fmt.Errorf("evaluation array element has invalid comment_id %q", item.CommentID.String())
 		}
-		if err := validateVerdict(item.Verdict); err != nil {
-			return nil, fmt.Errorf("comment %d: %w", id, err)
-		}
-		if _, exists := evals[id]; exists {
+		ids[i] = id
+		counts[id]++
+	}
+
+	// Duplicated IDs are marked as present with a nil Evaluation before any
+	// verdict is validated, so an invalid verdict in any of their occurrences
+	// leaves them recoverable instead of failing the whole parse.
+	evals := make(map[int64]*Evaluation, len(counts))
+	for i, item := range items {
+		id := ids[i]
+		if counts[id] > 1 {
 			evals[id] = nil
 			continue
+		}
+		if err := validateVerdict(item.Verdict); err != nil {
+			return nil, fmt.Errorf("comment %d: %w", id, err)
 		}
 		evals[id] = &Evaluation{Verdict: item.Verdict, Reason: item.Reason}
 	}
