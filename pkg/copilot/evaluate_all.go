@@ -2,6 +2,7 @@ package copilot
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -117,19 +118,88 @@ func appendUnique(dst []string, values []string) []string {
 
 // evaluateAllBatch runs a single Copilot CLI invocation covering every comment.
 func evaluateAllBatch(ctx context.Context, opts EvaluateOptions, repoSlug string, prNumber int, comments []*Comment) ([]*EvaluationResult, *Usage) {
+	if opts.SessionID == "" {
+		opts.SessionID = NewSessionID()
+	}
+	perCommentTimeout := opts.Timeout
 	opts.Timeout = batchTimeout(opts.Timeout, len(comments))
 	if opts.Log != nil {
 		fmt.Fprintf(opts.Log, "\n--- evaluating %d comments in a single batch (timeout %s) ---\n", len(comments), opts.Timeout)
 	}
 	evals, usage, err := EvaluateBatch(ctx, opts, repoSlug, prNumber, comments)
+	var results []*EvaluationResult
 	if err != nil {
-		results := make([]*EvaluationResult, len(comments))
+		results = make([]*EvaluationResult, len(comments))
 		for i, c := range comments {
 			results[i] = &EvaluationResult{Comment: c, Error: err.Error()}
 		}
+		// A response that parsed but covered none of the comments is the
+		// all-missing case of the same defect recovery handles, so it is
+		// retried too; a genuine execution or JSON failure is not.
+		if !errors.Is(err, ErrNoVerdicts) {
+			return withDenials(results, usage), usage
+		}
+	} else {
+		results = assignBatchResults(comments, evals)
+	}
+	var pending []*Comment
+	for _, res := range results {
+		if res.Evaluation == nil {
+			pending = append(pending, res.Comment)
+		}
+	}
+	if len(pending) == 0 || ctx.Err() != nil || (usage != nil && usage.QuotaExceeded) {
 		return withDenials(results, usage), usage
 	}
-	return withDenials(assignBatchResults(comments, evals), usage), usage
+
+	opts.ResumeSession = true
+	opts.Timeout = batchTimeout(perCommentTimeout, len(pending))
+	opts.RubberDuck = false
+	// The first pass may already have applied fixes, so the recovery must not
+	// act on the repository whatever permissions that pass was granted.
+	opts.ReadOnly = true
+	opts.Prompt = "Your previous batch response had missing or duplicate comment IDs. Recover the judgements for only the comments listed below from the work already completed in this session. Do not edit files, run tools, or repeat fixes. Return each listed comment_id exactly once with its verdict and reason in the final JSON array. If a judgement cannot be recovered confidently, use unclear and explain why. Do not include any other comment IDs or corrections outside the JSON block."
+	if opts.Log != nil {
+		fmt.Fprintf(opts.Log, "\n--- recovering evaluations for %d missing or duplicate comments (timeout %s) ---\n", len(pending), opts.Timeout)
+	}
+	recovered, retryUsage, retryErr := EvaluateBatch(ctx, opts, repoSlug, prNumber, pending)
+	if retryUsage != nil {
+		if usage != nil {
+			retryUsage.Denials = append(usage.Denials, retryUsage.Denials...)
+			retryUsage.Recommendations = appendUnique(usage.Recommendations, retryUsage.Recommendations)
+			retryUsage.WritablePaths = appendUnique(usage.WritablePaths, retryUsage.WritablePaths)
+			retryUsage.QuotaExceeded = usage.QuotaExceeded || retryUsage.QuotaExceeded
+			// A retry that ended before the CLI printed its usage footer (a
+			// quota stop, for instance) reports zero counters, which must not
+			// erase what the first invocation already reported.
+			keepCounters(retryUsage, usage)
+		}
+		usage = retryUsage
+	}
+	for _, res := range results {
+		if res.Evaluation != nil {
+			continue
+		}
+		if retryErr != nil {
+			res.Error = fmt.Sprintf("%s; recovery failed: %v", res.Error, retryErr)
+		} else if eval := recovered[res.Comment.CommentID]; eval != nil {
+			res.Evaluation = eval
+			res.Error = ""
+		}
+	}
+	return withDenials(results, usage), usage
+}
+
+// keepCounters carries the counters prev reported over to usage when usage
+// reported none, so a retry without a usage footer does not drop totals the
+// CLI already reported. The CLI counters are session-cumulative, so the larger
+// value is the later one.
+func keepCounters(usage *Usage, prev *Usage) {
+	usage.AICredits = max(usage.AICredits, prev.AICredits)
+	usage.CostUSD = max(usage.CostUSD, prev.CostUSD)
+	usage.InputTokens = max(usage.InputTokens, prev.InputTokens)
+	usage.OutputTokens = max(usage.OutputTokens, prev.OutputTokens)
+	usage.CachedTokens = max(usage.CachedTokens, prev.CachedTokens)
 }
 
 // batchTimeout scales a per-comment timeout to the single invocation that
@@ -161,8 +231,10 @@ func assignBatchResults(comments []*Comment, evals map[int64]*Evaluation) []*Eva
 	results := make([]*EvaluationResult, len(comments))
 	for i, c := range comments {
 		res := &EvaluationResult{Comment: c}
-		if eval, ok := evals[c.CommentID]; ok {
+		if eval, ok := evals[c.CommentID]; ok && eval != nil {
 			res.Evaluation = eval
+		} else if ok {
+			res.Error = fmt.Sprintf("duplicate evaluations returned for comment %d", c.CommentID)
 		} else {
 			res.Error = fmt.Sprintf("no evaluation returned for comment %d", c.CommentID)
 		}

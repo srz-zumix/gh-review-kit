@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -55,6 +57,14 @@ type EvaluateOptions struct {
 	// ResumeSession, for Claude Code, resumes SessionID with --resume instead of
 	// creating it with --session-id, which rejects an ID that already exists.
 	ResumeSession bool
+	// ReadOnly, when true, restricts the evaluation to reading at the CLI
+	// level, for invocations that must not act on the repository: AutoApprove
+	// is ignored, and deny rules that hold over any allow rule, including those
+	// passed through ExtraArgs, are added. The Copilot CLI is limited to the
+	// view, grep and glob tools, with shell, write, url and memory denied and
+	// its built-in MCP servers disabled; Claude Code has every tool denied. No
+	// permission recommendations are made for the denials it causes.
+	ReadOnly bool
 	// Sandbox, when true, passes --sandbox to enable the Copilot CLI's OS-level
 	// shell sandbox for the evaluation. The Copilot CLI ignores --sandbox unless
 	// --experimental is also passed, so --experimental is added automatically,
@@ -139,9 +149,14 @@ func Evaluate(ctx context.Context, opts EvaluateOptions, repoSlug string, prNumb
 	return eval, usage, nil
 }
 
+// ErrNoVerdicts reports that the CLI output parsed cleanly but covered none of
+// the requested comments, so every comment is missing rather than the run
+// having failed. Callers can recover from it by asking for the verdicts again.
+var ErrNoVerdicts = errors.New("no verdicts for the requested comments found in output")
+
 // EvaluateBatch runs the Copilot CLI once to judge every comment together,
 // returning one Evaluation per comment_id the Copilot CLI reported; comments
-// it did not report on are simply absent from the returned map. The returned
+// it did not report on are absent and duplicate IDs have nil evaluations. The returned
 // Usage is the session total reported by the Copilot CLI, and may be
 // non-nil even when an error is returned.
 func EvaluateBatch(ctx context.Context, opts EvaluateOptions, repoSlug string, prNumber int, comments []*Comment) (map[int64]*Evaluation, *Usage, error) {
@@ -163,7 +178,7 @@ func EvaluateBatch(ctx context.Context, opts EvaluateOptions, repoSlug string, p
 	if parseErr == nil && evaluatedCount(evals, comments) == 0 {
 		// A JSON array can appear anywhere in the CLI transcript, so one
 		// covering none of the comments is not the verdict list.
-		parseErr = fmt.Errorf("no JSON array of verdicts found in output")
+		parseErr = ErrNoVerdicts
 	}
 	if parseErr != nil {
 		if runErr != nil {
@@ -174,7 +189,7 @@ func EvaluateBatch(ctx context.Context, opts EvaluateOptions, repoSlug string, p
 	return evals, usage, nil
 }
 
-// evaluatedCount returns how many of comments evals holds a verdict for.
+// evaluatedCount returns how many requested IDs occur in evals, including duplicates.
 func evaluatedCount(evals map[int64]*Evaluation, comments []*Comment) int {
 	n := 0
 	for _, c := range comments {
@@ -283,7 +298,7 @@ func buildArgs(opts EvaluateOptions, prompt string) []string {
 	if opts.Model != "" {
 		args = append(args, "--model", opts.Model)
 	}
-	if opts.AutoApprove {
+	if opts.AutoApprove && !opts.ReadOnly {
 		args = append(args, "--allow-all-tools")
 	}
 	if opts.Sandbox {
@@ -294,8 +309,34 @@ func buildArgs(opts EvaluateOptions, prompt string) []string {
 	if dir := sandboxWorkingDir(opts); dir != "" {
 		args = append(args, "--add-dir", dir)
 	}
+	if opts.ReadOnly {
+		return appendRestrictions(args, opts.ExtraArgs, copilotReadOnlyArgs)
+	}
 	args = append(args, opts.ExtraArgs...)
 	return args
+}
+
+// copilotReadOnlyArgs restricts the Copilot CLI to reading for ReadOnly. Deny
+// rules take precedence over allow rules, even --allow-all, so passthrough
+// options cannot lift them.
+var copilotReadOnlyArgs = []string{
+	"--available-tools=view,grep,glob",
+	"--deny-tool=shell,write,url,memory",
+	"--disable-builtin-mcps",
+}
+
+// appendRestrictions appends extraArgs followed by restrictions to args, so
+// that restrictions win over options that take the last occurrence. They are
+// placed before a "--" in extraArgs, which would otherwise make the CLI read
+// them as positional arguments.
+func appendRestrictions(args []string, extraArgs []string, restrictions []string) []string {
+	end := slices.Index(extraArgs, "--")
+	if end < 0 {
+		end = len(extraArgs)
+	}
+	args = append(args, extraArgs[:end]...)
+	args = append(args, restrictions...)
+	return append(args, extraArgs[end:]...)
 }
 
 // sandboxWorkingDir returns the directory the evaluation runs in, which the
@@ -327,7 +368,9 @@ func newUsage(opts EvaluateOptions, output string) *Usage {
 		usage = &Usage{}
 	}
 	usage.Denials = denialLabels(calls)
-	usage.Recommendations, usage.WritablePaths = recommendPermissions(opts, calls)
+	if !opts.ReadOnly {
+		usage.Recommendations, usage.WritablePaths = recommendPermissions(opts, calls)
+	}
 	usage.QuotaExceeded = quotaExceeded
 	return usage
 }
@@ -513,6 +556,7 @@ func buildBatchPrompt(userPrompt string, language string, rubberDuck bool, check
 	}
 	b.WriteString("After completing the task above, output your final judgement for every comment listed, as the last thing you print, as a single fenced JSON code block containing an array with exactly these keys per element:\n")
 	b.WriteString("```json\n[{\"comment_id\": 123, \"verdict\": \"valid|invalid|unclear\", \"reason\": \"...\"}]\n```\n")
+	b.WriteString("Include each listed comment_id exactly once, with no other IDs. Verify the IDs before responding. Put all corrections in the JSON array and do not print anything after the JSON block.\n")
 	if language != "" {
 		b.WriteString(fmt.Sprintf("Write each \"reason\" value in %s.\n", language))
 	}
@@ -583,14 +627,29 @@ func parseBatchEvaluation(output string) (map[int64]*Evaluation, error) {
 		return nil, fmt.Errorf("invalid JSON evaluation array: %w", err)
 	}
 
-	evals := make(map[int64]*Evaluation, len(items))
-	for _, item := range items {
+	ids := make([]int64, len(items))
+	counts := make(map[int64]int, len(items))
+	for i, item := range items {
 		if item.CommentID == "" {
 			return nil, fmt.Errorf("evaluation array element is missing comment_id")
 		}
 		id, err := strconv.ParseInt(item.CommentID.String(), 10, 64)
 		if err != nil || id == 0 {
 			return nil, fmt.Errorf("evaluation array element has invalid comment_id %q", item.CommentID.String())
+		}
+		ids[i] = id
+		counts[id]++
+	}
+
+	// Duplicated IDs are marked as present with a nil Evaluation before any
+	// verdict is validated, so an invalid verdict in any of their occurrences
+	// leaves them recoverable instead of failing the whole parse.
+	evals := make(map[int64]*Evaluation, len(counts))
+	for i, item := range items {
+		id := ids[i]
+		if counts[id] > 1 {
+			evals[id] = nil
+			continue
 		}
 		if err := validateVerdict(item.Verdict); err != nil {
 			return nil, fmt.Errorf("comment %d: %w", id, err)
