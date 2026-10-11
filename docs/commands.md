@@ -917,6 +917,85 @@ gh review-kit insights report --dataset ./dataset \
   --review-states CHANGES_REQUESTED --since 2025-10-01T00:00:00Z
 ```
 
+### script
+
+#### Execute a reviewed shell script
+
+```sh
+gh review-kit script run SOURCE [flags] [-- script-arg...]
+```
+
+Review the root script and ask for confirmation on `/dev/tty` before execution. `SOURCE` is required: an HTTPS URL, local file, or `-` for stdin. Flags and script arguments are optional. At or below `--max-risk`, confirmation accepts `y` or `yes`. Above that threshold, the risk remains unchanged and explicit approval requires the exact lowercase word `execute`; `y` and `yes` do not approve. Both prompts default to refusal and accept `v` to view escaped, numbered source through `$PAGER` (default: `less -F -X`), or `r` to display the report. With no terminal, `--yes` is required and risks above the threshold are always refused.
+
+All review flags below also apply to `run`. Additional flags:
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--max-risk` | `low` | Maximum risk for `--yes` or simple `y/N` confirmation; above it, interactive execution requires `execute`. Values: `none`, `low`, `medium`, `high`, `critical` |
+| `--shell` | Shebang's shell, otherwise `bash` | Override with `sh`, `bash`, `dash`, `zsh`, or `ksh`, optionally an absolute path |
+| `--yes` | `false` | Skip confirmation; never bypass the risk threshold |
+
+The script is fetched once. Its SHA256 is checked again immediately before the interpreter receives the reviewed file through an inherited descriptor. The shebang's shell name is resolved on local `PATH`, not at an arbitrary path supplied by the remote script. Only simple `-e`, `-u`, and `-x` shebang flags are accepted; unsupported interpreters or options require an explicit `--shell`. `BASH_ENV`, `ENV`, imported Bash functions, `BASHOPTS`, `SHELLOPTS`, and `ZDOTDIR` are removed from the execution environment.
+
+The root script runs with the caller's working directory and permissions, without a sandbox. Its `$0` is `/dev/fd/3`, not the original source path; scripts that reopen themselves or locate adjacent files may need adaptation. Other shell startup files, dependencies, local executables, and runtime network responses are outside the review guarantee. Arguments after `--` are passed only to the script, never to the AI CLI. For stdin source with a terminal, script input comes from `/dev/tty`; without a terminal the source has already consumed stdin. Reports go to stderr, script output to stdout, and a normal script exit code is preserved. `--read-only` forbids execution.
+
+```sh
+# Review and confirm before running a local installer
+gh review-kit script run ./install.sh --evaluate
+
+# Non-interactive execution still requires risk <= low
+gh review-kit script run ./install.sh --yes --max-risk low -- --prefix "$HOME/.local"
+```
+
+#### Review a shell script
+
+```sh
+gh review-kit script review SOURCE [flags]
+```
+
+Fetch and review a shell script without executing it. `SOURCE` is required: an HTTPS URL, local file, or `-` for stdin. All flags are optional. No GitHub repository or authentication is required for downloading. Download requests do not include GitHub authentication headers. AI evaluation requires the selected CLI to be installed and authenticated; script content is sent to that evaluator.
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--allow-http` | `false` | Permit HTTP sources and redirect targets; otherwise HTTPS is required throughout |
+| `--bin` | `copilot` or `claude` | AI CLI executable; requires `--evaluate` |
+| `--checksums-url` | None | URL of a SHA256SUMS file with exactly one entry matching the root source's basename; cannot combine with `--sha256` |
+| `--depth` | `1` | Nested script review depth, between 0 and 3; at most 16 scripts total |
+| `--evaluate[=copilot\|claude]` | Disabled | Add AI review; the bare flag selects `copilot` |
+| `--format` | `text` | Report format: `text` or `json`; review reports go to stdout |
+| `--language` | Evaluator's language | AI response language |
+| `--max-size` | `5242880` | Maximum decoded bytes per script or checksum file, between 1 and 67108864 |
+| `--model` | Evaluator's model | AI model; requires `--evaluate` |
+| `--prompt-file` | None | Additional AI review instructions from a local file; requires `--evaluate` |
+| `--save` | None | Save scripts as SHA256-named `.sh` files and `report.json` in a new 0700 directory; files are 0600 |
+| `--sha256` | None | Expected root script SHA256, exactly 64 hex characters; a mismatch stops before review |
+| `--timeout` | `2m` | Timeout per download or AI invocation, not a script execution timeout |
+
+Downloads allow at most four redirects and reject HTTP errors, oversized content, and non-HTTP(S) destinations. An HTML response is a high-risk finding. Bash syntax trees are checked for privilege escalation, deletion, computed commands, encoded code, persistence, sensitive paths, and network activity. Syntax that cannot be parsed is high risk. This is not ShellCheck and does not support every shell dialect.
+
+Known reads or printed mentions of `/etc/` are low risk; recognized mutations and output redirections remain high risk, and unresolved access is medium. `command -v` and `command -V` capability probes are not command-wrapper findings. Dynamic commands remain medium risk; they are not assumed safe. Text reports group findings with identical severity, rule, and message, show counts and unique line numbers, and prioritize higher severities. Different explanations are retained. JSON reports preserve every individual finding and the aggregate risk.
+
+Static URL downloads used by shell pipelines, command substitution, or later execution are candidates for recursive review. Archives and recognizable binaries are listed, not inspected. Variable-dependent destinations, fetch failures, cycles, depth/count limits, and runtime downloads remain at least medium risk. Even a successfully reviewed child is fetched again by the installer at runtime, so its reviewed hash is evidence only, not enforcement. The default `low` threshold blocks these scripts with `--yes`; interactive execution requires explicit `execute` approval.
+
+AI review runs in a private temporary working directory with CLI-level read-only tool restrictions; this is not an OS isolation boundary. Untrusted source is delimited in the prompt. Malformed, incomplete, ambiguous, failed, or permission-denied AI results stop the workflow. AI and child findings can increase risk but cannot remove static findings. The aggregate risk is the maximum across all findings and children. Review is heuristic, not proof of safety.
+
+SHA256 verification covers only the root script. A downloaded checksum file proves neither publisher identity nor authenticity; obtain expected hashes through an independently trusted channel. Signature verification is not implemented. `--read-only` permits review but forbids saving artifacts and running scripts. Execution currently requires Unix.
+
+```sh
+# Review without execution
+gh review-kit script review ./install.sh
+
+# Add Claude review and save artifacts to a new directory
+gh review-kit script review ./install.sh --evaluate=claude --save ./installer-review
+
+# Obtain a JSON report for already downloaded source
+gh review-kit script review - --format json < ./install.sh
+
+# Verify against a hash obtained through an independently trusted channel
+expected_sha256=$(shasum -a 256 ./install.sh | cut -d ' ' -f 1)
+gh review-kit script review ./install.sh --sha256 "$expected_sha256"
+```
+
 ### Re-request review for a pull request
 
 ```sh

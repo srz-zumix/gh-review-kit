@@ -1,6 +1,6 @@
 ---
 name: gh-review-kit
-description: GitHub CLI extension (gh review-kit) for managing GitHub pull request reviews — including listing check runs with advanced filtering, displaying logs for failed checks, listing all review feedback (review bodies, inline review comments, and issue comments) on a pull request, re-requesting reviews, building/analyzing normalized datasets of PR review feedback for large-scale review-comment mining, embedding Git provenance metadata into video files, and judging/acting on GitHub Copilot code review comments.
+description: GitHub CLI extension (gh review-kit) for managing GitHub pull request reviews — including listing check runs with advanced filtering, displaying logs for failed checks, listing all review feedback (review bodies, inline review comments, and issue comments) on a pull request, re-requesting reviews, building/analyzing normalized datasets of PR review feedback for large-scale review-comment mining, embedding Git provenance metadata into video files, judging/acting on GitHub Copilot code review comments, and reviewing shell installers before confirmed execution.
 ---
 
 # gh-review-kit
@@ -59,9 +59,29 @@ gh review-kit                       # Root command
 │   └── status                      # Show the Copilot code review status of a pull request
 ├── rerequest                       # Re-request review for a pull request
 ├── reviewed                        # Mark files in a pull request as viewed
+├── script                          # Review shell installers before execution
+│   ├── review                      # Static and optional read-only AI review
+│   └── run                         # Review, confirm by risk level, and execute
 ├── skills                          # Manage agent skills
 └── completion                      # Shell completion
 ```
+
+## Review Shell Installers
+
+Use `script review SOURCE [flags]` before executing a `curl | bash` style installer. `SOURCE` is required and accepts an HTTPS URL, local file, or `-` (stdin). Static checks use Bash syntax; `--evaluate` adds Copilot, or `--evaluate=claude` adds Claude. Both run with CLI-level read-only restrictions in a private working directory, not an OS sandbox. Source content is sent to the evaluator. Review does not require GitHub authentication; AI evaluation requires the selected CLI's authentication.
+
+```sh
+gh review-kit script review ./install.sh --evaluate --format json
+gh review-kit script run ./install.sh --evaluate
+```
+
+`script run SOURCE [flags] [-- script-arg...]` confirms on `/dev/tty` and executes the reviewed root bytes after another SHA256 check. `--max-risk` defaults to `low`: at or below it, `y`/`yes` confirms; above it, the exact lowercase word `execute` is required. The reported risk does not change. `--yes` skips confirmation but always refuses risk above the threshold. Without a terminal, `--yes` is required. `--` arguments are for the script, not the AI CLI. Never automatically raise `--max-risk`, add `--yes`, or submit `execute` for the user; present findings and obtain the user's decision. Execution is not sandboxed and currently requires Unix. Reports go to stderr for `run`, stdout for `review`.
+
+Optional checksums (`--sha256` or `--checksums-url`, mutually exclusive) apply only to the root. They do not authenticate the publisher; use independently trusted hashes. `--depth` defaults to 1 (0-3), with at most 16 scripts total. Nested runtime downloads can change after review and remain medium risk, so the default threshold blocks them with `--yes` and requires explicit interactive approval. Binaries, archives, and unresolved destinations are not inspected. AI cannot lower static risk; failed or invalid AI review stops the workflow. No detected issue is not proof of safety.
+
+Text reports group repeated findings by severity, rule, and explanation with counts and unique line numbers; JSON preserves individual findings. Known reads or printed mentions of `/etc/` are low risk, recognized writes remain high, and unresolved access is medium. `command -v`/`-V` probes are not executable-wrapper findings. Dynamic commands retain their risk and are only grouped for readability.
+
+`--max-size` defaults to 5242880 bytes per source and `--timeout` to 2m per download/AI invocation. `--allow-http` explicitly permits HTTP. `--format` defaults to text. `--save NEW_DIR` keeps private script copies and `report.json`; the directory must not exist. `--shell` overrides the shebang's shell (bash if absent). AI options include `--bin`, `--model`, `--language`, and `--prompt-file`. There are no AI CLI passthrough arguments. `--read-only` allows review only, not saving or execution. See the [script reference](../../docs/commands.md#script) for all defaults and limitations.
 
 ## Global Options
 
