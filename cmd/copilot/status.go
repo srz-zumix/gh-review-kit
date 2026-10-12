@@ -32,8 +32,12 @@ The reported status is one of:
   approved           Copilot's latest review approved the pull request
   changes_requested  Copilot's latest review requested changes
   dismissed          Copilot's latest review was dismissed
+  merged             The pull request is already merged
+  closed             The pull request is closed without being merged
 
-A pending review request takes precedence, so a pull request that Copilot has
+merged and closed take precedence over everything else, so a stale pull request
+that shares the branch name is not reported with its old review state.
+Otherwise, a pending review request takes precedence, so a pull request that Copilot has
 already reviewed and is reviewing again is reported as in_progress.
 
 head_reviewed tells whether Copilot reviewed the latest commit of the pull

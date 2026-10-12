@@ -875,7 +875,7 @@ gh review-kit copilot review-request --force
 
 Show where GitHub Copilot's code review of a pull request stands, together with the number of Copilot review comments and how many of them are still unresolved. If `pull-request-number` is omitted, the pull request for the current branch is used.
 
-The reported status is one of `not_requested`, `in_progress`, `commented`, `approved`, `changes_requested`, or `dismissed`. A pending review request takes precedence, so a pull request that Copilot has already reviewed and is reviewing again is reported as `in_progress`.
+The reported status is one of `not_requested`, `in_progress`, `commented`, `approved`, `changes_requested`, `dismissed`, `merged`, or `closed`. `merged` and `closed` take precedence over everything else, so a stale pull request sharing the branch name is not reported with its old review state. Otherwise, a pending review request takes precedence, so a pull request that Copilot has already reviewed and is reviewing again is reported as `in_progress`.
 
 `head_reviewed` tells whether Copilot reviewed the latest commit of the pull request. A `false` means every review it submitted predates the newest push, so the current code has not been reviewed yet.
 

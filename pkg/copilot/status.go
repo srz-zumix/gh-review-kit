@@ -25,6 +25,10 @@ const (
 	StatusApproved         Status = "approved"
 	StatusChangesRequested Status = "changes_requested"
 	StatusDismissed        Status = "dismissed"
+	// StatusMerged and StatusClosed report that the pull request itself is no
+	// longer open, regardless of Copilot's review history.
+	StatusMerged Status = "merged"
+	StatusClosed Status = "closed"
 )
 
 // ReviewStatus summarizes GitHub Copilot's code review on a pull request.
@@ -100,7 +104,11 @@ func GetReviewStatus(ctx context.Context, g *gh.GitHubClient, repo repository.Re
 		}
 	}
 
-	status.Status = deriveStatus(status.Requested, status.LastReviewState)
+	if s := pullRequestStateStatus(pull.GetMerged(), pull.GetState()); s != "" {
+		status.Status = s
+	} else {
+		status.Status = deriveStatus(status.Requested, status.LastReviewState)
+	}
 	return status, nil
 }
 
@@ -110,6 +118,10 @@ func GetReviewStatus(ctx context.Context, g *gh.GitHubClient, repo repository.Re
 // the latest one has not been reviewed since.
 func DecideReviewRequest(status *ReviewStatus) (bool, string) {
 	switch {
+	case status.Status == StatusMerged:
+		return false, "the pull request is already merged"
+	case status.Status == StatusClosed:
+		return false, "the pull request is closed"
 	case status.HeadReviewed:
 		return false, "Copilot has already reviewed the latest commit"
 	case status.Requested:
@@ -120,6 +132,19 @@ func DecideReviewRequest(status *ReviewStatus) (bool, string) {
 		return true, "Copilot has not been requested to review yet"
 	default:
 		return true, "Copilot reviewed an earlier commit and has not reviewed the latest one"
+	}
+}
+
+// pullRequestStateStatus returns StatusMerged or StatusClosed for a pull
+// request that is no longer open, and an empty Status otherwise.
+func pullRequestStateStatus(merged bool, state string) Status {
+	switch {
+	case merged:
+		return StatusMerged
+	case state == "closed":
+		return StatusClosed
+	default:
+		return ""
 	}
 }
 
