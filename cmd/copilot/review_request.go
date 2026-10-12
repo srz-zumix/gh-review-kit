@@ -25,14 +25,18 @@ func NewReviewRequestCmd() *cobra.Command {
 		Long: `Request a code review from GitHub Copilot on a pull request, the same as
 requesting a review from a human reviewer.
 
-The request is only sent when the latest commit has not been reviewed yet:
+The request is only sent when the pull request is still open and the latest
+commit has not been reviewed yet:
 
+  The pull request is merged or closed        nothing to do
   Copilot has never been requested            request a review
   Copilot reviewed an earlier commit only     request a review again
   Copilot is a requested reviewer already     nothing to do
   Copilot has reviewed the latest commit      nothing to do
 
-Use --force to request a review regardless of that state.
+Use --force to request a review regardless of that state. --force skips the
+status check entirely, so a review is requested even on a merged or closed
+pull request.
 
 If pull-request-number is omitted, the pull request for the current branch is used.`,
 		Args: cobra.MaximumNArgs(1),
