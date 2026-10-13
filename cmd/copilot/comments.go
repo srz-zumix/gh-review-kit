@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -60,7 +61,8 @@ to additionally judge each comment with the Copilot CLI (or with Claude Code,
 see --evaluate=claude): comments judged invalid receive a thumbs-down reaction and
 have their review thread resolved,
 while comments judged valid have their review thread resolved without a
-reaction. The prompt used to judge comments must be supplied with --prompt or
+reaction, and comments judged unclear have their review thread resolved as
+won't fix without a reaction. The prompt used to judge comments must be supplied with --prompt or
 --prompt-file.
 
 The Copilot CLI runs in non-interactive mode (-p) for evaluation, so it can
@@ -347,7 +349,19 @@ skip the check.`,
 					}
 				}
 			}
-			logger.Info(name+" session", "session_id", sessionID, "hint", "pass --session-id to resume it")
+			resumeBin := bin
+			if resumeBin == "" {
+				resumeBin = evaluator.DefaultBin()
+			} else if runtime.GOOS == "windows" {
+				// cmd.exe treats single quotes literally; PowerShell needs the call operator for a quoted path.
+				if strings.ContainsAny(resumeBin, " \t&()^;,=") {
+					resumeBin = `"` + resumeBin + `"`
+				}
+			} else if strings.ContainsAny(resumeBin, " \t\n'\"\\$`&|;<>()*?[]{}~#!") {
+				resumeBin = "'" + strings.ReplaceAll(resumeBin, "'", `'\''`) + "'"
+			}
+			resumeHint := fmt.Sprintf("run %s --resume %s to resume it, or pass --session-id to gh review-kit", resumeBin, sessionID)
+			logger.Info(name+" session", "session_id", sessionID, "hint", resumeHint)
 			return evalErr
 		},
 	}

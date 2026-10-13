@@ -23,9 +23,10 @@ const (
 // ApplyEvaluation acts on an Evaluation for comment: when the comment is
 // judged invalid, it leaves a thumbs-down reaction and resolves the review
 // thread with reason INVALID. When the comment is judged valid, it resolves
-// the review thread with reason ADDRESSED. No action is taken for an
-// unclear verdict. When dryRun is true, the action that would be taken is
-// returned without performing it.
+// the review thread with reason ADDRESSED. When the verdict is unclear, it
+// resolves the review thread with reason WONT_FIX without a reaction. When
+// dryRun is true, the action that would be taken is returned without
+// performing it.
 func ApplyEvaluation(ctx context.Context, g *gh.GitHubClient, repo repository.Repository, comment *Comment, eval *Evaluation, dryRun bool) (Action, error) {
 	switch eval.Verdict {
 	case VerdictInvalid:
@@ -44,6 +45,14 @@ func ApplyEvaluation(ctx context.Context, g *gh.GitHubClient, repo repository.Re
 			return ActionResolved, nil
 		}
 		if err := g.ResolveReviewThread(ctx, repo.Owner, repo.Name, comment.ThreadID, gh.ResolutionReasonAddressed); err != nil {
+			return ActionNone, fmt.Errorf("failed to resolve thread for comment %d: %w", comment.CommentID, err)
+		}
+		return ActionResolved, nil
+	case VerdictUnclear:
+		if dryRun {
+			return ActionResolved, nil
+		}
+		if err := g.ResolveReviewThread(ctx, repo.Owner, repo.Name, comment.ThreadID, gh.ResolutionReasonWontFix); err != nil {
 			return ActionNone, fmt.Errorf("failed to resolve thread for comment %d: %w", comment.CommentID, err)
 		}
 		return ActionResolved, nil

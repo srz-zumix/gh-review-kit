@@ -7,7 +7,7 @@ description: GitHub CLI extension (gh review-kit) for managing GitHub pull reque
 
 GitHub CLI extension for managing GitHub pull request reviews from the command line.
 
-For Copilot review follow-up, `copilot comments --evaluate` judges feedback with the Copilot CLI or Claude Code and acts on verdicts: valid comments are resolved as `ADDRESSED`, invalid comments receive a thumbs-down and are resolved as `INVALID`, and unclear verdicts are left untouched. Supply `--prompt` or `--prompt-file`; use `--dryrun` to preview actions before applying them. Evaluation does not itself fix the code.
+For Copilot review follow-up, `copilot comments --evaluate` judges feedback with the Copilot CLI or Claude Code and acts on verdicts: valid comments are resolved as `ADDRESSED`, invalid comments receive a thumbs-down and are resolved as `INVALID`, and unclear verdicts are resolved as `WONT_FIX`. Supply `--prompt` or `--prompt-file`; use `--dryrun` to preview actions before applying them. Evaluation does not itself fix the code.
 
 Start with the [README](../../README.md) for a quick overview; use the [command reference](../../docs/commands.md) for complete usage, defaults, and examples.
 
@@ -662,7 +662,7 @@ gh review-kit insights report --dataset ./dataset \
 
 List GitHub Copilot code review comments on a pull request. By default, resolved and outdated review threads are excluded.
 
-Use `--evaluate` to additionally judge each comment with the [Copilot CLI](https://github.com/github/copilot-cli) (or with [Claude Code](https://docs.claude.com/en/docs/claude-code), see `--evaluate=claude`): comments judged invalid receive a thumbs-down reaction and have their review thread resolved with resolution reason `INVALID`; comments judged valid have their review thread resolved with resolution reason `ADDRESSED`. The prompt used to judge comments must be supplied with `--prompt` or `--prompt-file`; gh-review-kit does not ship a built-in evaluation prompt — it is up to the caller to describe how to judge a comment.
+Use `--evaluate` to additionally judge each comment with the [Copilot CLI](https://github.com/github/copilot-cli) (or with [Claude Code](https://docs.claude.com/en/docs/claude-code), see `--evaluate=claude`): comments judged invalid receive a thumbs-down reaction and have their review thread resolved with resolution reason `INVALID`; comments judged valid have their review thread resolved with resolution reason `ADDRESSED`. Comments whose verdict is unclear have their review thread resolved with resolution reason `WONT_FIX`, without a reaction. The prompt used to judge comments must be supplied with `--prompt` or `--prompt-file`; gh-review-kit does not ship a built-in evaluation prompt — it is up to the caller to describe how to judge a comment.
 
 The Copilot CLI runs in non-interactive mode (`-p`) for evaluation, so it can never prompt for tool permissions and denies anything not pre-authorized, regardless of whether the command is run from a terminal or in CI. Use `--auto-approve` to apply the permission setting review-kit recommends for the Copilot CLI (`--allow-all-tools`, which allows every tool), or pass arguments after a `--` separator to forward them to the Copilot CLI, e.g. `-- --allow-tool=... --deny-tool=...` to scope permissions more tightly (an organization's Copilot policy may disable these bypass options entirely). Without either, a warning is printed before evaluation starts, and any tool calls the Copilot CLI denies are reported as a warning afterward, since they may leave its judgement based on incomplete information.
 
@@ -836,6 +836,7 @@ Request a code review from GitHub Copilot on a pull request, the same as request
 
 | State | Action |
 | --- | --- |
+| The pull request is merged or closed | nothing to do |
 | Copilot has never been requested | request a review |
 | Copilot reviewed an earlier commit only | request a review again |
 | Copilot is a requested reviewer already | nothing to do |

@@ -469,6 +469,10 @@ func endUntrusted(nonce string) string {
 	return fmt.Sprintf("--- END UNTRUSTED DATA %s ---\n", nonce)
 }
 
+// verdictGuide explains the verdict candidates; unclear is a valid answer and
+// the comment is then resolved as won't fix.
+const verdictGuide = "Verdicts: \"valid\" means the comment is correct and should be addressed; \"invalid\" means it is incorrect or does not apply; \"unclear\" means you cannot judge it confidently, and the comment will then be resolved as won't fix.\n"
+
 // localCheckoutNote tells the Copilot CLI that the working directory reflects
 // the pull request. Only the verified SHA is included; the branch name is
 // pull-request-controlled and so kept out of the trusted instructions.
@@ -507,6 +511,7 @@ func buildPrompt(userPrompt string, language string, rubberDuck bool, checkout *
 	}
 	b.WriteString("After completing the task above, output your final judgement as the last thing you print, as a single fenced JSON code block with exactly these keys:\n")
 	b.WriteString("```json\n{\"verdict\": \"valid|invalid|unclear\", \"reason\": \"...\"}\n```\n")
+	b.WriteString(verdictGuide)
 	if language != "" {
 		b.WriteString(fmt.Sprintf("Write the \"reason\" value in %s.\n", language))
 	}
@@ -556,6 +561,7 @@ func buildBatchPrompt(userPrompt string, language string, rubberDuck bool, check
 	}
 	b.WriteString("After completing the task above, output your final judgement for every comment listed, as the last thing you print, as a single fenced JSON code block containing an array with exactly these keys per element:\n")
 	b.WriteString("```json\n[{\"comment_id\": 123, \"verdict\": \"valid|invalid|unclear\", \"reason\": \"...\"}]\n```\n")
+	b.WriteString(verdictGuide)
 	b.WriteString("Include each listed comment_id exactly once, with no other IDs. Verify the IDs before responding. Put all corrections in the JSON array and do not print anything after the JSON block.\n")
 	if language != "" {
 		b.WriteString(fmt.Sprintf("Write each \"reason\" value in %s.\n", language))
