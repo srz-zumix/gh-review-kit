@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -351,6 +352,11 @@ skip the check.`,
 			resumeBin := bin
 			if resumeBin == "" {
 				resumeBin = evaluator.DefaultBin()
+			} else if runtime.GOOS == "windows" {
+				// cmd.exe treats single quotes literally; PowerShell needs the call operator for a quoted path.
+				if strings.ContainsAny(resumeBin, " \t&()^;,=") {
+					resumeBin = `"` + resumeBin + `"`
+				}
 			} else if strings.ContainsAny(resumeBin, " \t\n'\"\\$`&|;<>()*?[]{}~#!") {
 				resumeBin = "'" + strings.ReplaceAll(resumeBin, "'", `'\''`) + "'"
 			}
