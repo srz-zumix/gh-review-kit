@@ -348,7 +348,8 @@ skip the check.`,
 					}
 				}
 			}
-			logger.Info(name+" session", "session_id", sessionID, "hint", "pass --session-id to resume it")
+			resumeHint := fmt.Sprintf("run %s --resume %s to resume it, or pass --session-id to gh review-kit", evaluator.DefaultBin(), sessionID)
+			logger.Info(name+" session", "session_id", sessionID, "hint", resumeHint)
 			return evalErr
 		},
 	}
