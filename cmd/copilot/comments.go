@@ -60,7 +60,8 @@ to additionally judge each comment with the Copilot CLI (or with Claude Code,
 see --evaluate=claude): comments judged invalid receive a thumbs-down reaction and
 have their review thread resolved,
 while comments judged valid have their review thread resolved without a
-reaction. The prompt used to judge comments must be supplied with --prompt or
+reaction, and comments judged unclear have their review thread resolved as
+won't fix without a reaction. The prompt used to judge comments must be supplied with --prompt or
 --prompt-file.
 
 The Copilot CLI runs in non-interactive mode (-p) for evaluation, so it can

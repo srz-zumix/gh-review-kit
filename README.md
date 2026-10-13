@@ -88,7 +88,7 @@ Combine review bodies, inline comments, and issue comments; filter by type or pa
 gh review-kit copilot comments [flags]
 ```
 
-List Copilot feedback, including resolved or outdated threads when requested. With `--evaluate` and a required `--prompt` or `--prompt-file`, the Copilot CLI (or Claude Code via `--evaluate=claude`) judges each comment against the PR: valid comments are resolved as `ADDRESSED`, invalid comments receive a thumbs-down and are resolved as `INVALID`, and unclear verdicts trigger no action. This streamlines closing out Copilot review feedback after handling fixes; it does not itself fix the code. Use `--dryrun` to preview actions before applying them. Without `--pr`, use the current branch's PR. See the [Copilot comments reference](docs/commands.md#list-copilot-code-review-comments-on-a-pull-request) for evaluation options and permissions.
+List Copilot feedback, including resolved or outdated threads when requested. With `--evaluate` and a required `--prompt` or `--prompt-file`, the Copilot CLI (or Claude Code via `--evaluate=claude`) judges each comment against the PR: valid comments are resolved as `ADDRESSED`, invalid comments receive a thumbs-down and are resolved as `INVALID`, and unclear verdicts are resolved as `WONT_FIX`. This streamlines closing out Copilot review feedback after handling fixes; it does not itself fix the code. Use `--dryrun` to preview actions before applying them. Without `--pr`, use the current branch's PR. See the [Copilot comments reference](docs/commands.md#list-copilot-code-review-comments-on-a-pull-request) for evaluation options and permissions.
 
 Batch evaluation retries missing or duplicate comment IDs once in the same session, preserving successful judgements.
 
