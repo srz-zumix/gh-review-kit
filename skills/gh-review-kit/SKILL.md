@@ -832,7 +832,7 @@ gh review-kit copilot resolve https://github.com/owner/repo/pull/123#discussion_
 
 ## Request a Copilot Review (copilot review-request)
 
-Request a code review from GitHub Copilot on a pull request, the same as requesting a review from a human reviewer. The request is only sent when the latest commit has not been reviewed yet:
+Request a code review from GitHub Copilot on a pull request, the same as requesting a review from a human reviewer. The request is only sent when the pull request is still open and the latest commit has not been reviewed yet:
 
 | State | Action |
 | --- | --- |
@@ -841,7 +841,7 @@ Request a code review from GitHub Copilot on a pull request, the same as request
 | Copilot is a requested reviewer already | nothing to do |
 | Copilot has reviewed the latest commit | nothing to do |
 
-Use `--force` to request a review regardless of that state.
+Use `--force` to request a review regardless of that state. `--force` skips the status check entirely, so a review is requested even on a merged or closed pull request.
 
 Copilot's [review effort level](https://docs.github.com/en/copilot/concepts/agents/code-review#review-effort-level) (Lite or Balanced) cannot be selected through this command: neither the REST `requested_reviewers` endpoint nor the GraphQL `requestReviews` mutation exposes a parameter for it, so the pull request's or organization's configured default effort level is always used. Change the default in the repository or organization settings, or select it manually in the pull request's Reviewers section on GitHub.com, if a specific effort level is needed.
 
@@ -875,7 +875,7 @@ gh review-kit copilot review-request --force
 
 Show where GitHub Copilot's code review of a pull request stands, together with the number of Copilot review comments and how many of them are still unresolved. If `pull-request-number` is omitted, the pull request for the current branch is used.
 
-The reported status is one of `not_requested`, `in_progress`, `commented`, `approved`, `changes_requested`, or `dismissed`. A pending review request takes precedence, so a pull request that Copilot has already reviewed and is reviewing again is reported as `in_progress`.
+The reported status is one of `not_requested`, `in_progress`, `commented`, `approved`, `changes_requested`, `dismissed`, `merged`, or `closed`. `merged` and `closed` take precedence over everything else, so a stale pull request sharing the branch name is not reported with its old review state. Otherwise, a pending review request takes precedence, so a pull request that Copilot has already reviewed and is reviewing again is reported as `in_progress`.
 
 `head_reviewed` tells whether Copilot reviewed the latest commit of the pull request. A `false` means every review it submitted predates the newest push, so the current code has not been reviewed yet.
 

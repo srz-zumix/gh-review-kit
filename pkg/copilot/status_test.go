@@ -111,12 +111,34 @@ func TestDeriveStatus(t *testing.T) {
 	}
 }
 
+func TestPullRequestStateStatus(t *testing.T) {
+	tests := []struct {
+		name   string
+		merged bool
+		state  string
+		want   Status
+	}{
+		{"open", false, "open", ""},
+		{"merged", true, "closed", StatusMerged},
+		{"closed", false, "closed", StatusClosed},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := pullRequestStateStatus(tt.merged, tt.state); got != tt.want {
+				t.Errorf("pullRequestStateStatus(%t, %q) = %q, want %q", tt.merged, tt.state, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestDecideReviewRequest(t *testing.T) {
 	tests := []struct {
 		name   string
 		status ReviewStatus
 		want   bool
 	}{
+		{"merged pull request", ReviewStatus{Status: StatusMerged, ReviewCount: 1}, false},
+		{"closed pull request", ReviewStatus{Status: StatusClosed}, false},
 		{"never requested", ReviewStatus{}, true},
 		{"reviewed an earlier commit only", ReviewStatus{ReviewCount: 1}, true},
 		{"requested and waiting for an answer", ReviewStatus{Requested: true}, false},
