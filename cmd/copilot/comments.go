@@ -348,7 +348,13 @@ skip the check.`,
 					}
 				}
 			}
-			resumeHint := fmt.Sprintf("run %s --resume %s to resume it, or pass --session-id to gh review-kit", evaluator.DefaultBin(), sessionID)
+			resumeBin := bin
+			if resumeBin == "" {
+				resumeBin = evaluator.DefaultBin()
+			} else if strings.ContainsAny(resumeBin, " \t\n'\"\\$`&|;<>()*?[]{}~#!") {
+				resumeBin = "'" + strings.ReplaceAll(resumeBin, "'", `'\''`) + "'"
+			}
+			resumeHint := fmt.Sprintf("run %s --resume %s to resume it, or pass --session-id to gh review-kit", resumeBin, sessionID)
 			logger.Info(name+" session", "session_id", sessionID, "hint", resumeHint)
 			return evalErr
 		},
