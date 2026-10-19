@@ -76,6 +76,7 @@ type EvaluateOptions struct {
 	// LocalCheckout, when set, tells the Copilot CLI that the working directory
 	// is a verified checkout of the pull request's latest commit.
 	LocalCheckout *LocalCheckout
+	WorkingDir    string
 	// Log, when set, receives the CLI output as it is produced; Claude Code
 	// only reports its result when it finishes.
 	Log io.Writer
@@ -210,6 +211,14 @@ type cliRun struct {
 	Usage *Usage
 }
 
+func RunPrompt(ctx context.Context, opts EvaluateOptions, prompt string) (string, *Usage, error) {
+	if strings.TrimSpace(prompt) == "" {
+		return "", nil, fmt.Errorf("evaluation prompt is required")
+	}
+	run, err := runCLI(ctx, opts, prompt)
+	return run.Output, run.Usage, err
+}
+
 // processOutput is what a finished CLI process wrote.
 type processOutput struct {
 	// Stdout is the combined stdout/stderr when the run merged them.
@@ -244,6 +253,7 @@ func runProcess(ctx context.Context, opts EvaluateOptions, args []string, stdin 
 	}
 
 	cmd := exec.CommandContext(runCtx, bin, args...)
+	cmd.Dir = opts.WorkingDir
 	// The executable can be a shell wrapper that forks the real CLI, so
 	// signalling cmd alone would leave the CLI running past the timeout.
 	setProcessGroup(cmd, opts.Evaluator.IsClaude())
@@ -346,6 +356,9 @@ func appendRestrictions(args []string, extraArgs []string, restrictions []string
 func sandboxWorkingDir(opts EvaluateOptions) string {
 	if !opts.Sandbox {
 		return ""
+	}
+	if opts.WorkingDir != "" {
+		return opts.WorkingDir
 	}
 	dir, err := os.Getwd()
 	if err != nil {

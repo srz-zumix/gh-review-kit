@@ -6,6 +6,7 @@ Make GitHub pull request reviews easier to inspect, act on, and learn from with 
 - **Close the Copilot review loop:** evaluate review comments with an agent, automatically resolve addressed threads, and mark incorrect feedback with a thumbs-down and resolution. Re-request reviews and mark generated files as viewed, too.
 - **Learn from past reviews:** extract feedback into a reusable dataset, explore trends, and generate reports or candidate coding rules.
 - **Trace media back to its source:** embed and inspect Git provenance in videos and images.
+- **Review installers before execution:** inspect downloaded shell scripts, optionally add read-only AI review, verify SHA256, and confirm before running the reviewed bytes.
 
 ## Installation
 
@@ -25,6 +26,7 @@ gh review-kit checks failure
 gh review-kit comments list --include-bots
 gh review-kit copilot status
 gh review-kit insights estimate
+gh review-kit script review ./install.sh
 ```
 
 PR-related commands use the current branch's pull request by default. Use `--repo OWNER/REPO` to target another repository where supported. For every option, its default, and more examples, see the [command reference](docs/commands.md); `gh review-kit <command> --help` also shows the available flags.
@@ -213,6 +215,24 @@ gh review-kit reviewed [FILE...] [flags]
 ```
 
 Mark specified files as viewed, or (by default) all linguist-generated files; `--pr` selects a PR instead of the current branch's PR.
+
+### script
+
+#### Execute a reviewed shell script
+
+```sh
+gh review-kit script run SOURCE [flags] [-- script-arg...]
+```
+
+Fetch and review a required HTTPS URL, local file, or `-` (stdin), then confirm on the terminal before executing the reviewed root script. Above `--max-risk` (default: `low`), explicit approval requires typing `execute`, not `y`. `--yes` skips confirmation but refuses risks above that threshold. Use `--shell` to override the shebang's shell (default without a shebang: `bash`). Execution is not sandboxed; runtime downloads can change after review.
+
+#### Review a shell script
+
+```sh
+gh review-kit script review SOURCE [flags]
+```
+
+Inspect a required HTTPS URL, local file, or `-` (stdin) without executing it. Built-in checks use Bash syntax; `--evaluate[=copilot|claude]` optionally adds read-only AI review (bare flag: `copilot`). Text reports group repeated findings with counts and line numbers; JSON preserves individual findings. Nested scripts are reviewed to `--depth 1` by default (maximum: 3); binaries and archives are not inspected. Optionally verify `--sha256` or `--checksums-url`, select `--format json` (default: `text`), or keep artifacts with `--save NEW_DIR`. No detected issue is not proof of safety. See the [script reference](docs/commands.md#script) for limits and defaults.
 
 ## Agent Skills
 
