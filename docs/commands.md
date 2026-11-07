@@ -328,12 +328,22 @@ gh review-kit comments list 123 --format json
 #### List Copilot code review comments on a pull request
 
 ```sh
-gh review-kit copilot comments [--repo REPO] [--pr PR] [--author AUTHORS] [--include-resolved] [--include-outdated] [--evaluate[=copilot|claude]] [--alias-set NAME] [--batch] [--prompt PROMPT | --prompt-file FILE] [--bin BIN] [--agent AGENT] [--auto-approve] [--yolo] [--model MODEL] [--evaluate-timeout DURATION] [--sandbox] [--session-id ID] [--rubber-duck] [--language LANGUAGE] [--check-worktree] [--dryrun] [--json FIELDS] [-- AGENT_CLI_ARG...]
+gh review-kit copilot comments [--repo REPO] [--pr PR] [--author AUTHORS] [--include-resolved] [--include-outdated] [--evaluate[=copilot|claude]] [--alias-set NAME] [--batch] [--prompt PROMPT | --prompt-file FILE] [--bin BIN] [--agent AGENT] [--auto-approve] [--yolo] [--model MODEL] [--evaluate-timeout DURATION] [--sandbox] [--session-id ID] [--rubber-duck] [--language LANGUAGE] [--reply-reason] [--check-worktree] [--dryrun] [--json FIELDS] [-- AGENT_CLI_ARG...]
 ```
 
 List GitHub Copilot code review comments on a pull request.
 
 By default, resolved and outdated review threads are excluded. Use `--evaluate` to additionally judge each comment with the [Copilot CLI](https://github.com/github/copilot-cli) (or with [Claude Code](https://docs.claude.com/en/docs/claude-code), see `--evaluate=claude`): comments judged invalid receive a thumbs-down reaction and have their review thread resolved with resolution reason `INVALID`; comments judged valid have their review thread resolved with resolution reason `ADDRESSED`; comments judged unclear have their review thread resolved with resolution reason `WONT_FIX` and no reaction. The prompt used to judge comments must be supplied with `--prompt` or `--prompt-file`; gh-review-kit does not ship a built-in evaluation prompt.
+
+Use `--reply-reason` with `--evaluate` to post each non-empty evaluation reason
+unchanged as a reply in the corresponding review thread before applying
+verdicts. If an evaluation or reply fails, no verdict is applied to the selected
+comments in that thread; other threads can still be processed. The result
+reports the reply as `posted`, `planned`, or `failed`, with its ID and URL when
+available. `--dryrun` previews GitHub actions without posting or resolving; the
+evaluator still runs with its configured tool permissions. Re-running after a
+reply was posted but a later action or response failed can create a duplicate
+reply.
 
 The Copilot CLI runs in non-interactive mode (`-p`) for evaluation, so it can never prompt for tool permissions and denies anything not pre-authorized, regardless of whether the command is run from a terminal or in CI. Use `--auto-approve` to apply the permission setting review-kit recommends for the Copilot CLI ([assisted permissions](https://docs.github.com/en/copilot/concepts/customizations/allowing-safe-commands), `--assisted-approval`: a model reviews each tool request, approving those it judges safe and denying the rest), `--yolo` to allow every tool without a safety review (`--allow-all-tools`; it takes precedence over `--auto-approve`), or pass arguments after a `--` separator to forward them to the Copilot CLI, e.g. `-- --allow-tool=... --deny-tool=...` to scope permissions more tightly (an organization's Copilot policy may disable these bypass options entirely). Without either, a warning is printed before evaluation starts, and any tool calls the Copilot CLI denies are reported as a warning afterward, since they may leave its judgement based on incomplete information.
 
@@ -364,7 +374,7 @@ When run inside a local work tree of the repository, `--evaluate` first checks t
 - `--batch`: Judge every comment with a single CLI invocation instead of one per comment (optional, default: true)
 - `--bin`: Evaluator CLI executable name or path (optional, default: `copilot`, or `claude` with `--evaluate=claude`)
 - `--check-worktree`: With `--evaluate`, verify that a local work tree of the repository is on the pull request's head branch and contains its latest commit (optional, default: true)
-- `--dryrun, -n`: Report the action that would be taken without performing it (optional, default: false)
+- `--dryrun, -n`: Preview GitHub reactions, thread resolution, and replies without applying them (optional, default: false)
 - `--evaluate`: Judge each comment with the Copilot CLI or Claude Code and act on the verdict; use `--evaluate=copilot` or `--evaluate=claude` to pick the CLI (optional, default: not evaluated; `copilot` when given without a value)
 - `--evaluate-timeout`: Timeout for a single CLI evaluation, per comment; a batch run is given this much for every comment it covers (optional, default: `15m`)
 - `--include-outdated`: Include comments whose review thread is outdated (optional, default: false)
@@ -375,6 +385,8 @@ When run inside a local work tree of the repository, `--evaluate` first checks t
 - `--prompt, -p`: Prompt used to judge comments (required with `--evaluate`, mutually exclusive with `--prompt-file`)
 - `--prompt-file`: File containing the prompt used to judge comments (required with `--evaluate`, mutually exclusive with `--prompt`)
 - `--repo, -R`: Repository in the format 'owner/repo' (optional, defaults to current repository)
+- `--reply-reason, -r`: Post each evaluation reason as a reply in its review
+  thread (optional, requires `--evaluate`, default: false)
 - `--rubber-duck`: Ask the Copilot CLI's built-in rubber duck agent for a second opinion before deciding; ignored for Claude Code (optional, default: false)
 - `--sandbox`: Enable the evaluator CLI's OS-level shell sandbox for the evaluation; the Copilot CLI also gets `--experimental` and `--add-dir` for the current directory (optional, default: false)
 - `--session-id`: Session to resume (optional, default: a new session)
@@ -408,8 +420,13 @@ gh review-kit copilot comments --pr 123 --evaluate --prompt-file ./judge-prompt.
 # Judge each comment and have the evaluation reason written in Japanese
 gh review-kit copilot comments --pr 123 --evaluate --prompt-file ./judge-prompt.md --language Japanese --auto-approve
 
-# Preview the actions an evaluation run would take, without performing them
-gh review-kit copilot comments --pr 123 --evaluate --prompt-file ./judge-prompt.md --dryrun --auto-approve
+# Post each evaluation reason as a reply in its review thread
+gh review-kit copilot comments --pr 123 --evaluate \
+  --prompt-file ./judge-prompt.md -r --auto-approve
+
+# Preview GitHub actions without applying them
+gh review-kit copilot comments --pr 123 --evaluate \
+  --prompt-file ./judge-prompt.md -r --dryrun --auto-approve
 
 # Judge each comment with Claude Code in auto permission mode
 gh review-kit copilot comments --pr 123 --evaluate=claude --prompt-file ./judge-prompt.md --auto-approve

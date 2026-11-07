@@ -59,6 +59,15 @@ func RenderEvaluationResults(r *render.Renderer, results []*EvaluationResult) er
 		r.WriteLine(fmt.Sprintf("verdict=%s", verdict))
 		r.WriteLine(fmt.Sprintf("action=%s", res.Action))
 		r.WriteLine(fmt.Sprintf("reason=%s", reason))
+		if res.Reply != nil {
+			r.WriteLine(fmt.Sprintf("reply=%s", res.Reply.Status))
+			if res.Reply.CommentID != 0 {
+				r.WriteLine(fmt.Sprintf("reply_id=%d", res.Reply.CommentID))
+			}
+			if res.Reply.URL != "" {
+				r.WriteLine(fmt.Sprintf("reply_url=%s", res.Reply.URL))
+			}
+		}
 		if res.Error != "" {
 			r.WriteLine(fmt.Sprintf("error=%s", res.Error))
 		}

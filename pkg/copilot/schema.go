@@ -39,6 +39,8 @@ type Comment struct {
 	IsResolved bool      `json:"is_resolved"`
 	IsOutdated bool      `json:"is_outdated"`
 	CreatedAt  time.Time `json:"created_at"`
+	// RootCommentID identifies the top-level comment that accepts thread replies.
+	RootCommentID int64 `json:"-"`
 }
 
 // Evaluation is the structured result the Copilot CLI is asked to produce
@@ -48,11 +50,28 @@ type Evaluation struct {
 	Reason  string  `json:"reason"`
 }
 
+// ReplyStatus describes the outcome of replying with a reason.
+type ReplyStatus string
+
+const (
+	ReplyPlanned ReplyStatus = "planned"
+	ReplyPosted  ReplyStatus = "posted"
+	ReplyFailed  ReplyStatus = "failed"
+)
+
+// EvaluationReply records the outcome of replying with an evaluation reason.
+type EvaluationReply struct {
+	Status    ReplyStatus `json:"status"`
+	CommentID int64       `json:"comment_id,omitempty"`
+	URL       string      `json:"url,omitempty"`
+}
+
 // EvaluationResult pairs a Comment with its Evaluation and the Action taken on it.
 type EvaluationResult struct {
-	Comment    *Comment    `json:"comment"`
-	Evaluation *Evaluation `json:"evaluation,omitempty"`
-	Action     Action      `json:"action"`
+	Comment    *Comment         `json:"comment"`
+	Evaluation *Evaluation      `json:"evaluation,omitempty"`
+	Action     Action           `json:"action"`
+	Reply      *EvaluationReply `json:"reply,omitempty"`
 	// Denials lists tool calls the Copilot CLI denied while producing
 	// Evaluation. The same list may appear on multiple results when they
 	// share a single Copilot CLI invocation (e.g. under --batch).

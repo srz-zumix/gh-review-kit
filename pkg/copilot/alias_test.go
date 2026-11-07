@@ -28,7 +28,10 @@ func TestBuildAliasExpansion_Shell(t *testing.T) {
 	if err != nil {
 		t.Skip("sh not available")
 	}
-	flags := []AliasFlag{{Name: "prompt", Values: []string{"it's $HOME `x`"}}}
+	flags := []AliasFlag{
+		{Name: "prompt", Values: []string{"it's $HOME `x`"}},
+		{Name: "reply-reason", Values: []string{"true"}},
+	}
 	expansion := BuildAliasExpansion(EvaluatorCopilot, flags, nil)
 	// Replace the gh invocation with printf to observe the words the shell produces.
 	expansion = "gh() { printf '%s\\n' \"$@\"; }; " + expansion
@@ -39,11 +42,11 @@ func TestBuildAliasExpansion_Shell(t *testing.T) {
 		}
 		return string(out)
 	}
-	wantDefault := "review-kit\ncopilot\ncomments\n--evaluate=copilot\n--prompt=it's $HOME `x`\n"
+	wantDefault := "review-kit\ncopilot\ncomments\n--evaluate=copilot\n--prompt=it's $HOME `x`\n--reply-reason=true\n"
 	if got := run(); got != wantDefault {
 		t.Errorf("default run = %q, want %q", got, wantDefault)
 	}
-	wantClaude := "review-kit\ncopilot\ncomments\n--evaluate=claude\n--prompt=it's $HOME `x`\n--dryrun\n"
+	wantClaude := "review-kit\ncopilot\ncomments\n--evaluate=claude\n--prompt=it's $HOME `x`\n--reply-reason=true\n--dryrun\n"
 	if got := run("claude", "--dryrun"); got != wantClaude {
 		t.Errorf("claude run = %q, want %q", got, wantClaude)
 	}
@@ -57,7 +60,8 @@ func TestCollectAliasFlags(t *testing.T) {
 	fs.StringSlice("author", nil, "")
 	fs.Bool("sandbox", false, "")
 	fs.Bool("auto-approve", false, "")
-	if err := fs.Parse([]string{"--alias-set", "x", "--prompt-file", "p.md", "--author", "a,b", "--sandbox"}); err != nil {
+	fs.Bool("reply-reason", false, "")
+	if err := fs.Parse([]string{"--alias-set", "x", "--prompt-file", "p.md", "--author", "a,b", "--sandbox", "--reply-reason"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -69,6 +73,7 @@ func TestCollectAliasFlags(t *testing.T) {
 	want := []AliasFlag{
 		{Name: "author", Values: []string{"a", "b"}},
 		{Name: "prompt-file", Values: []string{abs}},
+		{Name: "reply-reason", Values: []string{"true"}},
 		{Name: "sandbox", Values: []string{"true"}},
 	}
 	if len(got) != len(want) {

@@ -18,7 +18,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// EvaluateOptions configures how the Copilot CLI is invoked to judge a Comment.
+// EvaluateOptions configures evaluation and the actions performed by EvaluateAll.
 type EvaluateOptions struct {
 	// Evaluator selects the CLI that runs the evaluation. The zero value is the
 	// Copilot CLI; the other fields' documentation describes the Copilot CLI and
@@ -79,6 +79,8 @@ type EvaluateOptions struct {
 	Sandbox bool
 	// Language, when set, instructs the Copilot CLI to respond in that language.
 	Language string
+	// ReplyReason posts each evaluation reason as a review-thread reply in EvaluateAll.
+	ReplyReason bool
 	// LocalCheckout, when set, tells the Copilot CLI that the working directory
 	// is a verified checkout of the pull request's latest commit.
 	LocalCheckout *LocalCheckout
