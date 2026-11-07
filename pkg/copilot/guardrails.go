@@ -118,21 +118,24 @@ func SummarizeDenials(denials []string) []string {
 
 // NeedsToolPermissionWarning reports whether an evaluation invocation is
 // likely to have tool calls denied because no permission was pre-authorized.
-// For the Copilot CLI, that is when autoApprove is false and extraArgs
-// contains neither --allow-all-tools nor --allow-tool (with or without an
-// "=value" suffix). For Claude Code, autoApprove selects auto mode, and
-// extraArgs must otherwise carry --allowedTools, --permission-mode auto or
+// For the Copilot CLI, that is when autoApprove and yolo are false and
+// extraArgs contains none of --assisted-approval, --allow-all-tools and
+// --allow-tool (with or without an "=value" suffix). For Claude Code,
+// autoApprove selects auto mode and yolo bypassPermissions, and extraArgs
+// must otherwise carry --allowedTools, --permission-mode auto or
 // bypassPermissions, or --dangerously-skip-permissions.
-func NeedsToolPermissionWarning(evaluator Evaluator, autoApprove bool, extraArgs []string) bool {
+func NeedsToolPermissionWarning(evaluator Evaluator, autoApprove, yolo bool, extraArgs []string) bool {
 	if evaluator.IsClaude() {
-		existing := existingClaudeOptions(EvaluateOptions{AutoApprove: autoApprove, ExtraArgs: extraArgs})
+		existing := existingClaudeOptions(EvaluateOptions{AutoApprove: autoApprove, Yolo: yolo, ExtraArgs: extraArgs})
 		return !existing.auto && !existing.bypass && len(existing.rules) == 0
 	}
-	if autoApprove {
+	if autoApprove || yolo {
 		return false
 	}
 	for _, a := range extraArgs {
 		switch {
+		case a == "--assisted-approval", strings.HasPrefix(a, "--assisted-approval="):
+			return false
 		case a == "--allow-all-tools", strings.HasPrefix(a, "--allow-all-tools="):
 			return false
 		case a == "--allow-tool", strings.HasPrefix(a, "--allow-tool="):

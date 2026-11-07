@@ -58,8 +58,25 @@ func TestRecommendToolOptions(t *testing.T) {
 		},
 		{
 			name:  "allow all tools already in effect",
+			opts:  EvaluateOptions{Yolo: true},
+			calls: []deniedCall{denied("shell", "ls somewhere")},
+		},
+		{
+			name:  "assisted approval still recommends allow tool",
 			opts:  EvaluateOptions{AutoApprove: true},
 			calls: []deniedCall{denied("shell", "ls somewhere")},
+			want:  []string{"--allow-tool=shell(ls:*)"},
+		},
+		{
+			name:  "assisted approval never falls back to allow all tools",
+			opts:  EvaluateOptions{AutoApprove: true},
+			calls: []deniedCall{denied("view", "cat hosts")},
+		},
+		{
+			name:  "assisted approval overrides forwarded allow all tools",
+			opts:  EvaluateOptions{ExtraArgs: []string{"--allow-all-tools", "--assisted-approval"}},
+			calls: []deniedCall{denied("shell", "ls somewhere")},
+			want:  []string{"--allow-tool=shell(ls:*)"},
 		},
 		{
 			name:  "allow tool already forwarded",
@@ -160,7 +177,7 @@ func TestRecommendDirOptions(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.opts.AutoApprove = true
+			tt.opts.Yolo = true
 			got, _ := recommendPermissions(tt.opts, tt.calls)
 			if len(got) == 0 && len(tt.want) == 0 {
 				return
@@ -207,7 +224,7 @@ func TestRecommendDirOptionsDetectsWrites(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, got := recommendPermissions(EvaluateOptions{AutoApprove: true}, tt.calls)
+			_, got := recommendPermissions(EvaluateOptions{Yolo: true}, tt.calls)
 			if len(got) == 0 && len(tt.want) == 0 {
 				return
 			}
@@ -225,7 +242,7 @@ func TestNewUsageRecommendsOptionsForDeniedCalls(t *testing.T) {
 		"  └ Permission denied and could not request permission from user\n" +
 		"\nAI Credits 5 (1s)\n"
 
-	usage := newUsage(EvaluateOptions{AutoApprove: true, Sandbox: true}, output)
+	usage := newUsage(EvaluateOptions{Yolo: true, Sandbox: true}, output)
 	if usage == nil {
 		t.Fatal("newUsage() = nil, want a usage")
 	}

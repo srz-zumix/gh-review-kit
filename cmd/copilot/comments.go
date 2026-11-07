@@ -18,12 +18,6 @@ import (
 	"github.com/srz-zumix/go-gh-extension/pkg/render"
 )
 
-// deprecatedFlagReplacements maps the deprecated Copilot CLI specific flags to their replacements.
-var deprecatedFlagReplacements = map[string]string{
-	"copilot-bin":     "bin",
-	"allow-all-tools": "auto-approve",
-}
-
 // NewCommentsCmd creates a new command to list, and optionally evaluate, Copilot review comments on a pull request.
 func NewCommentsCmd() *cobra.Command {
 	var (
@@ -40,6 +34,7 @@ func NewCommentsCmd() *cobra.Command {
 		bin             string
 		agent           string
 		autoApprove     bool
+		yolo            bool
 		model           string
 		evaluateTimeout time.Duration
 		sandbox         bool
@@ -69,8 +64,11 @@ The Copilot CLI runs in non-interactive mode (-p) for evaluation, so it can
 never prompt for tool permissions and denies anything not pre-authorized,
 regardless of whether the command is run from a terminal or in CI. Use
 --auto-approve to apply the permission setting review-kit recommends for the
-Copilot CLI (--allow-all-tools, which allows every tool), or pass arguments
-after a -- separator to forward them to the Copilot CLI, e.g.
+Copilot CLI (assisted permissions, --assisted-approval: a model reviews each
+tool request, approving those it judges safe and denying the rest), --yolo to
+allow every tool without a safety review (--allow-all-tools; it takes
+precedence over --auto-approve), or pass arguments after a -- separator to
+forward them to the Copilot CLI, e.g.
 -- --allow-tool=... --deny-tool=... to scope permissions more tightly (note
 that an organization's Copilot policy may disable these bypass options
 entirely). Without either, a warning is
@@ -79,11 +77,12 @@ warning afterward, since they may leave the Copilot CLI's judgement based on
 incomplete information.
 
 The Copilot CLI keeps tool, path, and URL permissions in separate categories,
-so --auto-approve authorizes tool execution but not file access outside
-the working directory. Denied tool calls are therefore also reported with the
+so --auto-approve and --yolo authorize tool execution but not file access
+outside the working directory. Denied tool calls are therefore also reported with the
 options that would have allowed them, as a -- passthrough list to paste onto
 a re-run, e.g. -- --allow-tool='shell(go:*)' --add-dir=/path/to/module/cache.
-Paths are always narrowed to --add-dir; --allow-all-paths is never
+--allow-all-tools is never recommended under --auto-approve, since assisted
+permissions take precedence over it. Paths are always narrowed to --add-dir; --allow-all-paths is never
 recommended. Note that --sandbox enforces an OS-level filesystem policy on
 top of these permissions, so denials on paths no --add-dir can reach, such as
 symlinks out of the working directory or network access, persist until
@@ -100,7 +99,7 @@ judgement pass. Use --batch=false to run one invocation per comment instead.
 Missing or duplicate comment IDs are retried once in the same session, for
 only the affected comments. The retry asks for corrected JSON judgements
 without repeating fixes, and runs without tool permissions whatever
---auto-approve or passthrough options grant: the Copilot CLI is limited to
+--auto-approve, --yolo or passthrough options grant: the Copilot CLI is limited to
 the view, grep and glob tools with built-in MCP servers disabled and shell,
 write, URL and memory access denied, and Claude Code has every tool denied. Successful judgements are preserved;
 remaining failures are reported per comment. No retry runs after cancellation
@@ -137,7 +136,8 @@ Use --evaluate=claude to judge comments with Claude Code instead of the
 Copilot CLI (--evaluate alone, or --evaluate=copilot, selects the Copilot CLI;
 the value must be attached with =); --bin selects its executable (default: claude). Claude Code also
 runs in non-interactive mode (-p), so --auto-approve applies auto mode
-(--permission-mode auto), and arguments after a -- separator are
+(--permission-mode auto), --yolo skips permission checks (--permission-mode
+bypassPermissions), and arguments after a -- separator are
 forwarded to it, e.g. -- --allowedTools='Bash(go *)'. Denied tool calls are
 reported with the --allowedTools and --add-dir options that would have allowed
 them. --sandbox enables Claude Code's sandbox through --settings, --rubber-duck
@@ -172,8 +172,7 @@ skip the check.`,
 				aliasFlags, err := pkgcopilot.CollectAliasFlags(cmd.Flags(), pkgcopilot.AliasFlagOptions{
 					Skip:          []string{"alias-set", "evaluate"},
 					PathFlags:     []string{"prompt-file"},
-					ExecPathFlags: []string{"bin", "copilot-bin"},
-					Rename:        deprecatedFlagReplacements,
+					ExecPathFlags: []string{"bin"},
 				})
 				if err != nil {
 					return fmt.Errorf("failed to collect flags for alias '%s': %w", aliasName, err)
@@ -195,13 +194,6 @@ skip the check.`,
 				evaluator, err = pkgcopilot.ParseEvaluator(evaluatorName)
 				if err != nil {
 					return fmt.Errorf("invalid --evaluate value: %w", err)
-				}
-				if evaluator.IsClaude() {
-					for _, name := range []string{"copilot-bin", "allow-all-tools"} {
-						if cmd.Flags().Changed(name) {
-							return fmt.Errorf("--%s applies only to the Copilot CLI evaluator; use --%s instead", name, deprecatedFlagReplacements[name])
-						}
-					}
 				}
 			}
 
@@ -280,7 +272,7 @@ skip the check.`,
 			if !evaluator.IsClaude() && pkgcopilot.LooksLikeSlashCommand(promptText) {
 				logger.Warn("Prompt starts with what looks like a slash command; the Copilot CLI's -p mode passes it through as literal text instead of expanding it", "hint", "use --agent for a custom agent, or --rubber-duck for the rubber duck agent")
 			}
-			if pkgcopilot.NeedsToolPermissionWarning(evaluator, autoApprove, args) {
+			if pkgcopilot.NeedsToolPermissionWarning(evaluator, autoApprove, yolo, args) {
 				hint := "use --auto-approve, or -- --allow-tool=... to scope permissions more tightly"
 				if evaluator.IsClaude() {
 					hint = "use --auto-approve, or -- --allowedTools=... to scope permissions more tightly"
@@ -302,6 +294,7 @@ skip the check.`,
 				Agent:         agent,
 				Prompt:        promptText,
 				AutoApprove:   autoApprove,
+				Yolo:          yolo,
 				Model:         model,
 				RubberDuck:    rubberDuck,
 				ExtraArgs:     args,
@@ -379,14 +372,9 @@ skip the check.`,
 	f.StringVar(&promptFile, "prompt-file", "", "File containing the prompt used to judge comments (mutually exclusive with --prompt)")
 	f.StringVar(&bin, "bin", "", "Evaluator CLI executable name or path (default: copilot, or claude with --evaluate=claude)")
 	f.StringVar(&aliasName, "alias-set", "", "Register a gh alias with this name that runs this command with the other given flags, then exit; the alias takes an optional leading copilot|claude and further flags")
-	// Deprecated aliases kept for compatibility with scripts written for earlier releases.
-	f.StringVar(&bin, "copilot-bin", "", "Copilot CLI executable name or path")
-	f.BoolVar(&autoApprove, "allow-all-tools", false, "Allow the Copilot CLI to use any tool without approval during evaluation")
-	for name, replacement := range deprecatedFlagReplacements {
-		_ = f.MarkDeprecated(name, fmt.Sprintf("use --%s instead", replacement))
-	}
 	f.StringVar(&agent, "agent", "", "Custom agent to use for evaluation")
-	f.BoolVar(&autoApprove, "auto-approve", false, "Apply the tool permission setting review-kit recommends for the evaluator CLI, so evaluation runs without approval prompts (Copilot CLI: --allow-all-tools, Claude Code: --permission-mode auto)")
+	f.BoolVar(&autoApprove, "auto-approve", false, "Apply the tool permission setting review-kit recommends for the evaluator CLI, so evaluation runs without approval prompts (Copilot CLI: --assisted-approval, Claude Code: --permission-mode auto)")
+	f.BoolVar(&yolo, "yolo", false, "Allow the evaluator CLI to use any tool without approval or a safety review, taking precedence over --auto-approve (Copilot CLI: --allow-all-tools, Claude Code: --permission-mode bypassPermissions)")
 	f.StringVar(&model, "model", "", "Model to use for evaluation (default: the evaluator CLI's default model)")
 	f.DurationVar(&evaluateTimeout, "evaluate-timeout", 15*time.Minute, "Timeout for a single CLI evaluation, per comment (a batch run is given this much for every comment it covers)")
 	f.BoolVar(&sandbox, "sandbox", false, "Enable the evaluator CLI's OS-level shell sandbox for the evaluation (Copilot CLI also gets --experimental and --add-dir for the current directory)")

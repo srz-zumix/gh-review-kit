@@ -60,8 +60,18 @@ func TestBuildArgs(t *testing.T) {
 			want: []string{"-p", "prompt", "--no-color", "--log-level", "none", "--experimental", "--sandbox", "--add-dir", wd, "--allow-tool", "shell(git:*)"},
 		},
 		{
-			name: "allow all tools",
+			name: "auto approve is assisted approval",
 			opts: EvaluateOptions{AutoApprove: true},
+			want: []string{"-p", "prompt", "--no-color", "--log-level", "none", "--assisted-approval"},
+		},
+		{
+			name: "yolo allows all tools",
+			opts: EvaluateOptions{Yolo: true},
+			want: []string{"-p", "prompt", "--no-color", "--log-level", "none", "--allow-all-tools"},
+		},
+		{
+			name: "yolo takes precedence over auto approve",
+			opts: EvaluateOptions{AutoApprove: true, Yolo: true},
 			want: []string{"-p", "prompt", "--no-color", "--log-level", "none", "--allow-all-tools"},
 		},
 		{
@@ -71,7 +81,7 @@ func TestBuildArgs(t *testing.T) {
 		},
 		{
 			name: "model and allow all tools before extra args",
-			opts: EvaluateOptions{Model: "gpt-5", AutoApprove: true, ExtraArgs: []string{"--deny-tool", "shell(rm:*)"}},
+			opts: EvaluateOptions{Model: "gpt-5", Yolo: true, ExtraArgs: []string{"--deny-tool", "shell(rm:*)"}},
 			want: []string{"-p", "prompt", "--no-color", "--log-level", "none", "--model", "gpt-5", "--allow-all-tools", "--deny-tool", "shell(rm:*)"},
 		},
 		{
@@ -80,8 +90,8 @@ func TestBuildArgs(t *testing.T) {
 			want: []string{"-p", "prompt", "--no-color", "--log-level", "none"},
 		},
 		{
-			name: "read only overrides auto approve and extra args",
-			opts: EvaluateOptions{AutoApprove: true, ReadOnly: true, ExtraArgs: []string{"--allow-all", "--allow-tool", "shell(git:*)"}},
+			name: "read only overrides auto approve, yolo and extra args",
+			opts: EvaluateOptions{AutoApprove: true, Yolo: true, ReadOnly: true, ExtraArgs: []string{"--allow-all", "--allow-tool", "shell(git:*)"}},
 			want: []string{"-p", "prompt", "--no-color", "--log-level", "none", "--allow-all", "--allow-tool", "shell(git:*)", "--available-tools=view,grep,glob", "--deny-tool=shell,write,url,memory", "--disable-builtin-mcps"},
 		},
 		{
