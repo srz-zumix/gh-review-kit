@@ -13,13 +13,13 @@ import (
 )
 
 // EvaluateAll judges every comment of a pull request and applies each
-// verdict (see ApplyEvaluation), either with one Copilot CLI invocation per
-// comment (batch is false) or a single invocation covering every comment
-// (batch is true). It returns one EvaluationResult per comment, in the same
-// order as comments, plus the most recent Usage the Copilot CLI reported. The
-// returned error is non-nil when any comment failed to be evaluated or acted
-// on; the per-comment details are retained in the results so callers can
-// still render every outcome.
+// verdict (see ApplyEvaluation), optionally replying with its reason. It uses
+// one Copilot CLI invocation per comment (batch is false) or a single
+// invocation covering every comment (batch is true). It returns one
+// EvaluationResult per comment, in the same order as comments, plus the most
+// recent Usage the Copilot CLI reported. The returned error is non-nil when
+// any comment failed to be evaluated or acted on; the per-comment details are
+// retained in the results so callers can still render every outcome.
 func EvaluateAll(ctx context.Context, g *gh.GitHubClient, repo repository.Repository, opts EvaluateOptions, repoSlug string, prNumber int, comments []*Comment, batch bool, dryRun bool) ([]*EvaluationResult, *Usage, error) {
 	var results []*EvaluationResult
 	var usage *Usage
@@ -29,8 +29,30 @@ func EvaluateAll(ctx context.Context, g *gh.GitHubClient, repo repository.Reposi
 		results, usage = evaluateAllSequential(ctx, opts, repoSlug, prNumber, comments)
 	}
 
+	var failedThreads map[string]bool
+	if opts.ReplyReason {
+		failedThreads = make(map[string]bool)
+		// Finish replies before resolving a thread so a sibling failure cannot hide it.
+		for _, res := range results {
+			if res.Evaluation == nil || res.Error != "" {
+				failedThreads[res.Comment.ThreadID] = true
+				continue
+			}
+			res.Action = ActionNone
+			reply, err := replyEvaluationReason(ctx, g, repo, prNumber, res.Comment, res.Evaluation.Reason, dryRun)
+			res.Reply = reply
+			if err != nil {
+				res.Error = err.Error()
+				failedThreads[res.Comment.ThreadID] = true
+			}
+		}
+	}
 	for _, res := range results {
-		if res.Evaluation == nil {
+		if res.Evaluation == nil || (opts.ReplyReason && res.Error != "") {
+			continue
+		}
+		if failedThreads[res.Comment.ThreadID] {
+			res.Error = fmt.Sprintf("failed to apply verdict: another comment in review thread %q failed evaluation or reply", res.Comment.ThreadID)
 			continue
 		}
 		action, err := ApplyEvaluation(ctx, g, repo, res.Comment, res.Evaluation, dryRun)

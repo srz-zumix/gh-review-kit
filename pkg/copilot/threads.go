@@ -46,17 +46,18 @@ func ListComments(ctx context.Context, g *gh.GitHubClient, repo repository.Repos
 				continue
 			}
 			comments = append(comments, &Comment{
-				ThreadID:   thread.ID,
-				CommentID:  c.DatabaseID,
-				URL:        c.URL,
-				Author:     c.Author,
-				Body:       c.Body,
-				Path:       c.Path,
-				Line:       c.Line,
-				DiffHunk:   c.DiffHunk,
-				IsResolved: thread.IsResolved,
-				IsOutdated: thread.IsOutdated,
-				CreatedAt:  c.CreatedAt,
+				ThreadID:      thread.ID,
+				CommentID:     c.DatabaseID,
+				RootCommentID: thread.Comments[0].DatabaseID,
+				URL:           c.URL,
+				Author:        c.Author,
+				Body:          c.Body,
+				Path:          c.Path,
+				Line:          c.Line,
+				DiffHunk:      c.DiffHunk,
+				IsResolved:    thread.IsResolved,
+				IsOutdated:    thread.IsOutdated,
+				CreatedAt:     c.CreatedAt,
 			})
 		}
 	}

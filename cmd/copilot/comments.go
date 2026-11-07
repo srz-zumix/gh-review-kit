@@ -42,6 +42,7 @@ func NewCommentsCmd() *cobra.Command {
 		rubberDuck      bool
 		dryRun          bool
 		language        string
+		replyReason     bool
 		checkWorktree   bool
 		opts            struct{ Exporter cmdutil.Exporter }
 	)
@@ -123,6 +124,13 @@ only in interactive mode, so they have no effect here.
 
 Use --language to have the evaluation reason written in a specific language.
 
+Use --reply-reason with --evaluate to post each evaluation reason as a reply
+in its review thread before applying verdicts. If an evaluation or reply
+fails, no verdict is applied to the selected comments in that thread. Use
+--dryrun to preview the reply and verdict actions without applying them; the
+evaluator still runs with its configured tool permissions. A later failure
+after posting may cause a duplicate reply if the command is rerun.
+
 Use --alias-set NAME to register a gh alias instead of running: the other flags
 given (and any arguments after --) are embedded in a shell alias, so that
 "gh NAME [copilot|claude] [flags...]" runs this command with them. The
@@ -185,6 +193,9 @@ skip the check.`,
 			}
 
 			evaluate := cmd.Flags().Changed("evaluate")
+			if err := pkgcopilot.ValidateReplyReasonOption(evaluate, replyReason); err != nil {
+				return err
+			}
 			var evaluator pkgcopilot.Evaluator
 			if evaluate {
 				if (prompt == "") == (promptFile == "") {
@@ -303,6 +314,7 @@ skip the check.`,
 				ResumeSession: resumeSession,
 				Sandbox:       sandbox,
 				Language:      language,
+				ReplyReason:   replyReason,
 				LocalCheckout: checkout,
 				Log:           log,
 			}
@@ -380,8 +392,9 @@ skip the check.`,
 	f.BoolVar(&sandbox, "sandbox", false, "Enable the evaluator CLI's OS-level shell sandbox for the evaluation (Copilot CLI also gets --experimental and --add-dir for the current directory)")
 	f.StringVar(&sessionID, "session-id", "", "Session to resume (default: a new session)")
 	f.BoolVar(&rubberDuck, "rubber-duck", false, "Ask the Copilot CLI's built-in rubber duck agent for a second opinion before deciding (ignored for Claude Code)")
-	f.BoolVarP(&dryRun, "dryrun", "n", false, "Report the action that would be taken without performing it")
+	f.BoolVarP(&dryRun, "dryrun", "n", false, "Preview GitHub reactions, thread resolution, and replies without applying them")
 	f.StringVar(&language, "language", "", "Language for the evaluation reason (default: the evaluator CLI's default language)")
+	f.BoolVarP(&replyReason, "reply-reason", "r", false, "Post each evaluation reason as a reply in its review thread (requires --evaluate)")
 	f.BoolVar(&checkWorktree, "check-worktree", true, "With --evaluate, verify that a local work tree of the repository is on the pull request's head branch and contains its latest commit")
 	cmdutil.AddFormatFlags(cmd, &opts.Exporter)
 
