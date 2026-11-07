@@ -62,9 +62,19 @@ func TestBuildClaudeArgs(t *testing.T) {
 			want: []string{"-p", "--output-format", "stream-json", "--verbose", "--resume", "sess-1"},
 		},
 		{
-			name: "allow all tools is auto mode",
+			name: "auto approve is auto mode",
 			opts: EvaluateOptions{AutoApprove: true},
 			want: []string{"-p", "--output-format", "stream-json", "--verbose", "--permission-mode", "auto"},
+		},
+		{
+			name: "yolo bypasses permissions",
+			opts: EvaluateOptions{Yolo: true},
+			want: []string{"-p", "--output-format", "stream-json", "--verbose", "--permission-mode", "bypassPermissions"},
+		},
+		{
+			name: "yolo takes precedence over auto approve",
+			opts: EvaluateOptions{AutoApprove: true, Yolo: true},
+			want: []string{"-p", "--output-format", "stream-json", "--verbose", "--permission-mode", "bypassPermissions"},
 		},
 		{
 			name: "sandbox through settings",
@@ -82,8 +92,8 @@ func TestBuildClaudeArgs(t *testing.T) {
 			want: []string{"-p", "--output-format", "stream-json", "--verbose", "--permission-mode", "auto", "--allowedTools", "Bash(git *)"},
 		},
 		{
-			name: "read only overrides auto approve and extra args",
-			opts: EvaluateOptions{AutoApprove: true, ReadOnly: true, ExtraArgs: []string{"--dangerously-skip-permissions", "--permission-mode", "bypassPermissions", "--allowedTools", "Bash(git *)"}},
+			name: "read only overrides auto approve, yolo and extra args",
+			opts: EvaluateOptions{AutoApprove: true, Yolo: true, ReadOnly: true, ExtraArgs: []string{"--dangerously-skip-permissions", "--permission-mode", "bypassPermissions", "--allowedTools", "Bash(git *)"}},
 			want: []string{"-p", "--output-format", "stream-json", "--verbose", "--dangerously-skip-permissions", "--permission-mode", "bypassPermissions", "--allowedTools", "Bash(git *)", "--disallowedTools=*", "--permission-mode", "dontAsk"},
 		},
 		{
@@ -206,7 +216,9 @@ func TestExistingClaudeOptions(t *testing.T) {
 		wantDirs   []string
 	}{
 		{"nothing", EvaluateOptions{}, false, false, nil, nil},
-		{"allow all tools", EvaluateOptions{AutoApprove: true}, true, false, nil, nil},
+		{"auto approve", EvaluateOptions{AutoApprove: true}, true, false, nil, nil},
+		{"yolo", EvaluateOptions{Yolo: true}, false, true, nil, nil},
+		{"later mode overrides yolo", EvaluateOptions{Yolo: true, ExtraArgs: []string{"--permission-mode", "auto"}}, true, false, nil, nil},
 		{"permission mode auto", EvaluateOptions{ExtraArgs: []string{"--permission-mode", "auto"}}, true, false, nil, nil},
 		{"permission mode= bypass", EvaluateOptions{ExtraArgs: []string{"--permission-mode=bypassPermissions"}}, false, true, nil, nil},
 		{"skip permissions", EvaluateOptions{ExtraArgs: []string{"--dangerously-skip-permissions"}}, false, true, nil, nil},
@@ -366,23 +378,26 @@ func TestRecommendClaudePermissions(t *testing.T) {
 
 func TestNeedsToolPermissionWarningClaude(t *testing.T) {
 	tests := []struct {
-		name          string
-		allowAllTools bool
-		extraArgs     []string
-		want          bool
+		name        string
+		autoApprove bool
+		yolo        bool
+		extraArgs   []string
+		want        bool
 	}{
-		{"nothing authorized", false, nil, true},
-		{"allow all tools is auto mode", true, nil, false},
-		{"allowedTools", false, []string{"--allowedTools", "Bash(git *)"}, false},
-		{"permission mode auto", false, []string{"--permission-mode", "auto"}, false},
-		{"skip permissions", false, []string{"--dangerously-skip-permissions"}, false},
-		{"copilot option does not count", false, []string{"--allow-all-tools"}, true},
-		{"dontAsk denies everything", false, []string{"--permission-mode", "dontAsk"}, true},
-		{"dontAsk overrides auto approve", true, []string{"--permission-mode", "dontAsk"}, true},
+		{"nothing authorized", false, false, nil, true},
+		{"auto approve is auto mode", true, false, nil, false},
+		{"yolo is bypass permissions", false, true, nil, false},
+		{"allowedTools", false, false, []string{"--allowedTools", "Bash(git *)"}, false},
+		{"permission mode auto", false, false, []string{"--permission-mode", "auto"}, false},
+		{"skip permissions", false, false, []string{"--dangerously-skip-permissions"}, false},
+		{"copilot option does not count", false, false, []string{"--allow-all-tools"}, true},
+		{"dontAsk denies everything", false, false, []string{"--permission-mode", "dontAsk"}, true},
+		{"dontAsk overrides auto approve", true, false, []string{"--permission-mode", "dontAsk"}, true},
+		{"dontAsk overrides yolo", false, true, []string{"--permission-mode", "dontAsk"}, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := NeedsToolPermissionWarning(EvaluatorClaude, tt.allowAllTools, tt.extraArgs); got != tt.want {
+			if got := NeedsToolPermissionWarning(EvaluatorClaude, tt.autoApprove, tt.yolo, tt.extraArgs); got != tt.want {
 				t.Errorf("NeedsToolPermissionWarning() = %v, want %v", got, tt.want)
 			}
 		})

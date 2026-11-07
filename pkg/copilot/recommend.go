@@ -76,9 +76,12 @@ func recommendPermissions(opts EvaluateOptions, calls []deniedCall) (options []s
 
 // recommendToolOptions returns --allow-tool options for the commands the
 // denied calls tried to run, falling back to --allow-all-tools for calls whose
-// command could not be determined.
+// command could not be determined. --assisted-approval takes precedence over
+// --allow-all-tools, so under assisted permissions tool calls can still be
+// denied and --allow-all-tools is never suggested.
 func recommendToolOptions(calls []deniedCall, existing map[string]bool) []string {
-	if existing["--allow-all-tools"] {
+	assisted := existing["--assisted-approval"]
+	if existing["--allow-all-tools"] && !assisted {
 		return nil
 	}
 	names := make([]string, 0, len(calls))
@@ -102,7 +105,7 @@ func recommendToolOptions(calls []deniedCall, existing map[string]bool) []string
 			options = append(options, option)
 		}
 	}
-	if fallback {
+	if fallback && !assisted {
 		options = append(options, "--allow-all-tools")
 	}
 	return options
@@ -338,8 +341,11 @@ func covers(parent, dir string) bool {
 // the "--opt=value" form the recommendations use.
 func existingOptions(opts EvaluateOptions) map[string]bool {
 	existing := make(map[string]bool, len(opts.ExtraArgs)+1)
-	if opts.AutoApprove {
+	switch {
+	case opts.Yolo:
 		existing["--allow-all-tools"] = true
+	case opts.AutoApprove:
+		existing["--assisted-approval"] = true
 	}
 	for i, arg := range opts.ExtraArgs {
 		existing[arg] = true

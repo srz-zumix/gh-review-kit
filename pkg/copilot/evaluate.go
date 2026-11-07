@@ -32,11 +32,17 @@ type EvaluateOptions struct {
 	// optionally fix) a comment. It is required.
 	Prompt string
 	// AutoApprove, when true, applies the permission setting review-kit
-	// recommends for the evaluator: --allow-all-tools for the Copilot CLI and
-	// --permission-mode auto for Claude Code. The -p mode can never prompt for
-	// approval, so leaving this false causes any tool call not otherwise
-	// authorized via ExtraArgs to be denied.
+	// recommends for the evaluator: assisted permissions (--assisted-approval)
+	// for the Copilot CLI and --permission-mode auto for Claude Code, both of
+	// which have a model review each request and deny those it does not judge
+	// safe. The -p mode can never prompt for approval, so leaving this and Yolo
+	// false causes any tool call not otherwise authorized via ExtraArgs to be
+	// denied.
 	AutoApprove bool
+	// Yolo, when true, approves every tool call without a safety review:
+	// --allow-all-tools for the Copilot CLI and --permission-mode
+	// bypassPermissions for Claude Code. It takes precedence over AutoApprove.
+	Yolo bool
 	// Model, when set, is passed as --model to select the Copilot CLI model used
 	// for evaluation.
 	Model string
@@ -46,8 +52,8 @@ type EvaluateOptions struct {
 	// has no such agent, so it is ignored there.
 	RubberDuck bool
 	// ExtraArgs are appended verbatim to the Copilot CLI invocation, after
-	// AutoApprove and Model, e.g. for --allow-tool/--deny-tool to scope
-	// permissions more tightly than AutoApprove.
+	// AutoApprove, Yolo and Model, e.g. for --allow-tool/--deny-tool to scope
+	// permissions more tightly than Yolo.
 	ExtraArgs []string
 	// Timeout bounds how long a single Copilot CLI invocation may run. Zero means no timeout.
 	Timeout time.Duration
@@ -59,7 +65,7 @@ type EvaluateOptions struct {
 	ResumeSession bool
 	// ReadOnly, when true, restricts the evaluation to reading at the CLI
 	// level, for invocations that must not act on the repository: AutoApprove
-	// is ignored, and deny rules that hold over any allow rule, including those
+	// and Yolo are ignored, and deny rules that hold over any allow rule, including those
 	// passed through ExtraArgs, are added. The Copilot CLI is limited to the
 	// view, grep and glob tools, with shell, write, url and memory denied and
 	// its built-in MCP servers disabled; Claude Code has every tool denied. No
@@ -285,8 +291,8 @@ func runProcess(ctx context.Context, opts EvaluateOptions, args []string, stdin 
 // buildArgs assembles the Copilot CLI invocation arguments. The Copilot
 // CLI's -p flag runs in non-interactive mode and never prompts for tool
 // permissions, regardless of whether stdin/stdout are attached to a
-// terminal: anything not pre-authorized via AutoApprove or ExtraArgs is
-// simply denied.
+// terminal: anything not pre-authorized via AutoApprove, Yolo or ExtraArgs
+// is simply denied.
 func buildArgs(opts EvaluateOptions, prompt string) []string {
 	args := []string{"-p", prompt, "--no-color", "--log-level", "none"}
 	if opts.Agent != "" {
@@ -298,8 +304,15 @@ func buildArgs(opts EvaluateOptions, prompt string) []string {
 	if opts.Model != "" {
 		args = append(args, "--model", opts.Model)
 	}
-	if opts.AutoApprove && !opts.ReadOnly {
-		args = append(args, "--allow-all-tools")
+	if !opts.ReadOnly {
+		// --assisted-approval takes precedence over --allow-all-tools, so only
+		// one of them is passed, with Yolo winning.
+		switch {
+		case opts.Yolo:
+			args = append(args, "--allow-all-tools")
+		case opts.AutoApprove:
+			args = append(args, "--assisted-approval")
+		}
 	}
 	if opts.Sandbox {
 		// --sandbox is silently ignored by the Copilot CLI unless --experimental

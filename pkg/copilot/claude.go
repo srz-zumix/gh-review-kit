@@ -81,8 +81,8 @@ func buildClaudeArgs(opts EvaluateOptions) []string {
 	if opts.Model != "" {
 		args = append(args, "--model", opts.Model)
 	}
-	if opts.AutoApprove && !opts.ReadOnly {
-		args = append(args, "--permission-mode", "auto")
+	if mode := claudeApprovalMode(opts); mode != "" && !opts.ReadOnly {
+		args = append(args, "--permission-mode", mode)
 	}
 	if opts.Sandbox {
 		args = append(args, "--settings", claudeSandboxSettings)
@@ -92,6 +92,18 @@ func buildClaudeArgs(opts EvaluateOptions) []string {
 	}
 	args = append(args, opts.ExtraArgs...)
 	return args
+}
+
+// claudeApprovalMode returns the --permission-mode that Yolo or AutoApprove
+// selects, with Yolo winning, or "" when neither is set.
+func claudeApprovalMode(opts EvaluateOptions) string {
+	switch {
+	case opts.Yolo:
+		return "bypassPermissions"
+	case opts.AutoApprove:
+		return "auto"
+	}
+	return ""
 }
 
 // claudeReadOnlyArgs denies Claude Code every tool for ReadOnly. A bare "*"
@@ -390,12 +402,10 @@ type claudeExistingOptions struct {
 // the variadic --allowedTools and --add-dir forms.
 func existingClaudeOptions(opts EvaluateOptions) claudeExistingOptions {
 	existing := claudeExistingOptions{rules: map[string]bool{}}
-	// The --permission-mode emitted for AutoApprove precedes ExtraArgs, so a
-	// later --permission-mode overrides it; the last one is the effective mode.
-	mode := ""
-	if opts.AutoApprove {
-		mode = "auto"
-	}
+	// The --permission-mode emitted for AutoApprove or Yolo precedes
+	// ExtraArgs, so a later --permission-mode overrides it; the last one is the
+	// effective mode.
+	mode := claudeApprovalMode(opts)
 	skipPermissions := false
 	args := opts.ExtraArgs
 	for i := 0; i < len(args); i++ {

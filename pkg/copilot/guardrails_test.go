@@ -128,22 +128,25 @@ func TestSummarizeDenials(t *testing.T) {
 
 func TestNeedsToolPermissionWarning(t *testing.T) {
 	tests := []struct {
-		name          string
-		allowAllTools bool
-		extraArgs     []string
-		want          bool
+		name        string
+		autoApprove bool
+		yolo        bool
+		extraArgs   []string
+		want        bool
 	}{
-		{"nothing authorized", false, nil, true},
-		{"allow all tools option", true, nil, false},
-		{"allow-all-tools extra arg", false, []string{"--allow-all-tools"}, false},
-		{"allow-all-tools= extra arg", false, []string{"--allow-all-tools=true"}, false},
-		{"allow-tool extra arg", false, []string{"--allow-tool", "shell(git:*)"}, false},
-		{"allow-tool= extra arg", false, []string{"--allow-tool=shell(git:*)"}, false},
-		{"unrelated extra arg", false, []string{"--deny-tool", "shell(rm:*)"}, true},
+		{"nothing authorized", false, false, nil, true},
+		{"auto approve option", true, false, nil, false},
+		{"yolo option", false, true, nil, false},
+		{"assisted-approval extra arg", false, false, []string{"--assisted-approval"}, false},
+		{"allow-all-tools extra arg", false, false, []string{"--allow-all-tools"}, false},
+		{"allow-all-tools= extra arg", false, false, []string{"--allow-all-tools=true"}, false},
+		{"allow-tool extra arg", false, false, []string{"--allow-tool", "shell(git:*)"}, false},
+		{"allow-tool= extra arg", false, false, []string{"--allow-tool=shell(git:*)"}, false},
+		{"unrelated extra arg", false, false, []string{"--deny-tool", "shell(rm:*)"}, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := NeedsToolPermissionWarning(EvaluatorCopilot, tt.allowAllTools, tt.extraArgs); got != tt.want {
+			if got := NeedsToolPermissionWarning(EvaluatorCopilot, tt.autoApprove, tt.yolo, tt.extraArgs); got != tt.want {
 				t.Errorf("NeedsToolPermissionWarning() = %v, want %v", got, tt.want)
 			}
 		})
