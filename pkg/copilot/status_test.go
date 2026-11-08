@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cli/go-gh/v2/pkg/repository"
 	"github.com/google/go-github/v93/github"
@@ -181,5 +182,59 @@ func TestIsCopilotLogin(t *testing.T) {
 				t.Errorf("isCopilotLogin(%q) = %t, want %t", tt.login, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestSummarizeCopilotReviews(t *testing.T) {
+	ptr := func(v bool) *bool { return &v }
+	effort := func(v string) *string { return &v }
+	review := func(login, state, commit, submitted string, isCopilot *bool, eff *string) *gh.CopilotAttributedPullRequestReview {
+		ts, err := time.Parse(time.RFC3339, submitted)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return &gh.CopilotAttributedPullRequestReview{
+			PullRequestReview: github.PullRequestReview{
+				User:        &github.User{Login: github.Ptr(login)},
+				State:       github.Ptr(state),
+				CommitID:    github.Ptr(commit),
+				SubmittedAt: &github.Timestamp{Time: ts},
+			},
+			IsCopilotCodeReview:     isCopilot,
+			CopilotCodeReviewEffort: eff,
+		}
+	}
+
+	reviews := []*gh.CopilotAttributedPullRequestReview{
+		// Attributed Copilot review with effort.
+		review("copilot-pull-request-reviewer[bot]", "COMMENTED", "old", "2026-10-01T00:00:00Z", ptr(true), effort("lite")),
+		// Explicit attribution overrides the login: a human-looking login produced by Copilot.
+		review("someone", "COMMENTED", "head", "2026-10-03T00:00:00Z", ptr(true), effort("max")),
+		// Explicitly not Copilot despite the bot login.
+		review("copilot-pull-request-reviewer[bot]", "APPROVED", "head", "2026-10-04T00:00:00Z", ptr(false), nil),
+		// Server without the attribution field falls back to the login.
+		review("copilot-pull-request-reviewer[bot]", "COMMENTED", "old", "2026-10-02T00:00:00Z", nil, nil),
+		// Pending reviews are skipped.
+		review("copilot-pull-request-reviewer[bot]", "PENDING", "head", "2026-10-05T00:00:00Z", ptr(true), effort("balanced")),
+	}
+	status := &ReviewStatus{}
+	summarizeCopilotReviews(status, reviews, "head")
+
+	if status.ReviewCount != 3 {
+		t.Errorf("ReviewCount = %d, want 3", status.ReviewCount)
+	}
+	if status.LastReviewEffort != "max" || status.LastReviewState != "COMMENTED" {
+		t.Errorf("last review = %q/%q, want COMMENTED/max", status.LastReviewState, status.LastReviewEffort)
+	}
+	if !status.HeadReviewed {
+		t.Error("HeadReviewed = false, want true")
+	}
+
+	// The latest review without an effort clears the previously recorded effort.
+	status = &ReviewStatus{}
+	summarizeCopilotReviews(status, reviews[:1], "head")
+	summarizeCopilotReviews(status, []*gh.CopilotAttributedPullRequestReview{review("copilot", "COMMENTED", "x", "2026-10-09T00:00:00Z", nil, nil)}, "head")
+	if status.LastReviewEffort != "" {
+		t.Errorf("LastReviewEffort = %q, want empty", status.LastReviewEffort)
 	}
 }

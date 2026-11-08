@@ -33,14 +33,17 @@ const (
 
 // ReviewStatus summarizes GitHub Copilot's code review on a pull request.
 type ReviewStatus struct {
-	PullRequest        int        `json:"pull_request"`
-	Status             Status     `json:"status"`
-	Requested          bool       `json:"requested"`
-	ReviewCount        int        `json:"review_count"`
-	LastReviewState    string     `json:"last_review_state,omitempty"`
-	LastReviewedAt     *time.Time `json:"last_reviewed_at,omitempty"`
-	Comments           int        `json:"comments"`
-	UnresolvedComments int        `json:"unresolved_comments"`
+	PullRequest     int        `json:"pull_request"`
+	Status          Status     `json:"status"`
+	Requested       bool       `json:"requested"`
+	ReviewCount     int        `json:"review_count"`
+	LastReviewState string     `json:"last_review_state,omitempty"`
+	LastReviewedAt  *time.Time `json:"last_reviewed_at,omitempty"`
+	// LastReviewEffort is the review effort Copilot used for its most recent
+	// review, when the server reports it.
+	LastReviewEffort   string `json:"last_review_effort,omitempty"`
+	Comments           int    `json:"comments"`
+	UnresolvedComments int    `json:"unresolved_comments"`
 	// HeadReviewed reports whether Copilot reviewed the latest commit, so a
 	// false means every review it submitted predates the newest push.
 	HeadReviewed bool `json:"head_reviewed"`
@@ -73,25 +76,11 @@ func GetReviewStatus(ctx context.Context, g *gh.GitHubClient, repo repository.Re
 	}
 	headSHA := pull.GetHead().GetSHA()
 
-	reviews, err := gh.GetPullRequestReviews(ctx, g, repo, pull_request)
+	reviews, err := gh.ListPullRequestReviewsWithCopilotAttribution(ctx, g, repo, pull_request)
 	if err != nil {
 		return nil, err
 	}
-	for _, r := range reviews {
-		if !isCopilotLogin(r.GetUser().GetLogin()) || r.GetState() == gh.PullRequestReviewStatePending {
-			continue
-		}
-		status.ReviewCount++
-		submittedAt := r.GetSubmittedAt().Time
-		if status.LastReviewedAt == nil || submittedAt.After(*status.LastReviewedAt) {
-			status.LastReviewState = r.GetState()
-			status.LastReviewedAt = &submittedAt
-		}
-		// A review carries the commit it was submitted against.
-		if headSHA != "" && r.GetCommitID() == headSHA {
-			status.HeadReviewed = true
-		}
-	}
+	summarizeCopilotReviews(status, reviews, headSHA)
 
 	comments, err := ListComments(ctx, g, repo, pull_request, ListOptions{IncludeResolved: true, IncludeOutdated: true})
 	if err != nil {
@@ -110,6 +99,40 @@ func GetReviewStatus(ctx context.Context, g *gh.GitHubClient, repo repository.Re
 		status.Status = deriveStatus(status.Requested, status.LastReviewState)
 	}
 	return status, nil
+}
+
+// summarizeCopilotReviews records the count, latest state and effort of Copilot's
+// submitted reviews, and whether one of them targets headSHA.
+func summarizeCopilotReviews(status *ReviewStatus, reviews []*gh.CopilotAttributedPullRequestReview, headSHA string) {
+	for _, r := range reviews {
+		if !isCopilotReview(r) || r.GetState() == gh.PullRequestReviewStatePending {
+			continue
+		}
+		status.ReviewCount++
+		submittedAt := r.GetSubmittedAt().Time
+		if status.LastReviewedAt == nil || submittedAt.After(*status.LastReviewedAt) {
+			status.LastReviewState = r.GetState()
+			status.LastReviewedAt = &submittedAt
+			status.LastReviewEffort = ""
+			if r.CopilotCodeReviewEffort != nil {
+				status.LastReviewEffort = *r.CopilotCodeReviewEffort
+			}
+		}
+		// A review carries the commit it was submitted against.
+		if headSHA != "" && r.GetCommitID() == headSHA {
+			status.HeadReviewed = true
+		}
+	}
+}
+
+// isCopilotReview reports whether a review was produced by Copilot code review.
+// The explicit attribution field is trusted when the server reports it; servers
+// without it fall back to the reviewer login.
+func isCopilotReview(r *gh.CopilotAttributedPullRequestReview) bool {
+	if r.IsCopilotCodeReview != nil {
+		return *r.IsCopilotCodeReview
+	}
+	return isCopilotLogin(r.GetUser().GetLogin())
 }
 
 // DecideReviewRequest reports whether Copilot should be asked to review the

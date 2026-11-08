@@ -1,6 +1,10 @@
 package insights
 
-import "time"
+import (
+	"time"
+
+	"github.com/srz-zumix/go-gh-extension/pkg/gh"
+)
 
 // CommentType identifies which kind of pull request feedback a record represents.
 type CommentType string
@@ -50,6 +54,12 @@ type Comment struct {
 	DiffHunk     string `json:"diff_hunk,omitempty"`
 	InReplyTo    int64  `json:"in_reply_to,omitempty"`
 	Outdated     bool   `json:"outdated,omitempty"`
+
+	// Copilot code review attribution. Present only when the API reports it,
+	// so datasets extracted before attribution existed simply omit them.
+	IsCopilotCodeReview      bool                         `json:"is_copilot_code_review,omitempty"`
+	CopilotCodeReviewEffort  string                       `json:"copilot_code_review_effort,omitempty"`
+	CopilotCodeReviewSources []gh.CopilotCodeReviewSource `json:"copilot_code_review_sources,omitempty"`
 }
 
 // PR is the normalized record written to prs.jsonl. One record per pull request

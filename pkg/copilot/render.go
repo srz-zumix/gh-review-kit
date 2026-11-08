@@ -2,8 +2,10 @@ package copilot
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/srz-zumix/go-gh-extension/pkg/gh"
 	"github.com/srz-zumix/go-gh-extension/pkg/render"
 )
 
@@ -27,6 +29,7 @@ func RenderComments(r *render.Renderer, comments []*Comment) error {
 		r.WriteLine(fmt.Sprintf("resolved=%t", c.IsResolved))
 		r.WriteLine(fmt.Sprintf("outdated=%t", c.IsOutdated))
 		r.WriteLine(fmt.Sprintf("url=%s", c.URL))
+		writeSources(r, c.Sources)
 		r.WriteLine(fmt.Sprintf("body=%s", c.Body))
 	}
 	return nil
@@ -59,6 +62,7 @@ func RenderEvaluationResults(r *render.Renderer, results []*EvaluationResult) er
 		r.WriteLine(fmt.Sprintf("verdict=%s", verdict))
 		r.WriteLine(fmt.Sprintf("action=%s", res.Action))
 		r.WriteLine(fmt.Sprintf("reason=%s", reason))
+		writeSources(r, res.Comment.Sources)
 		if res.Reply != nil {
 			r.WriteLine(fmt.Sprintf("reply=%s", res.Reply.Status))
 			if res.Reply.CommentID != 0 {
@@ -72,7 +76,27 @@ func RenderEvaluationResults(r *render.Renderer, results []*EvaluationResult) er
 			r.WriteLine(fmt.Sprintf("error=%s", res.Error))
 		}
 	}
+	if summary := SummarizeVerdictsBySource(results); hasAttributedSource(summary) {
+		r.WriteLine("")
+		r.WriteLine("verdicts by source:")
+		for _, s := range summary {
+			r.WriteLine(fmt.Sprintf("source=%s total=%d valid=%d invalid=%d unclear=%d failed=%d valid_rate=%.0f%%",
+				s.Source, s.Total, s.Valid, s.Invalid, s.Unclear, s.Failed, s.ValidRate()*100))
+		}
+	}
 	return nil
+}
+
+// writeSources writes the Copilot code review sources line when there are any.
+func writeSources(r *render.Renderer, sources []gh.CopilotCodeReviewSource) {
+	if len(sources) == 0 {
+		return
+	}
+	names := make([]string, len(sources))
+	for i, s := range sources {
+		names[i] = FormatSource(s)
+	}
+	r.WriteLine(fmt.Sprintf("sources=%s", strings.Join(names, ",")))
 }
 
 // RenderReviewStatus writes a Copilot review status using r as "key=value"
@@ -91,6 +115,7 @@ func RenderReviewStatus(r *render.Renderer, status *ReviewStatus) error {
 	r.WriteLine(fmt.Sprintf("reviews=%d", status.ReviewCount))
 	r.WriteLine(fmt.Sprintf("last_review_state=%s", status.LastReviewState))
 	r.WriteLine(fmt.Sprintf("last_reviewed_at=%s", lastReviewedAt))
+	r.WriteLine(fmt.Sprintf("last_review_effort=%s", status.LastReviewEffort))
 	r.WriteLine(fmt.Sprintf("comments=%d", status.Comments))
 	r.WriteLine(fmt.Sprintf("unresolved_comments=%d", status.UnresolvedComments))
 	r.WriteLine(fmt.Sprintf("head_reviewed=%t", status.HeadReviewed))

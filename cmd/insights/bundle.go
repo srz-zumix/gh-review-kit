@@ -99,7 +99,7 @@ record count, and byte size for reproducibility.`,
 	f := cmd.Flags()
 	f.StringVar(&dataset, "dataset", "", "Dataset directory (required)")
 	f.StringVar(&outputDir, "output-dir", "", "Directory to write bundle files (required)")
-	f.StringVar(&groupBy, "group-by", "", "Grouping key: comment_type, repo, author, review_state, path_prefix, label (empty = single stream)")
+	f.StringVar(&groupBy, "group-by", "", "Grouping key: comment_type, repo, author, review_state, path_prefix, label, copilot_source, copilot_effort (empty = single stream)")
 	f.IntVar(&maxRecords, "max-records", 0, "Maximum records per bundle (0 = no record cap)")
 	f.Int64Var(&maxBytes, "max-bytes", 0, "Maximum bytes per bundle (0 = no byte cap)")
 	f.StringSliceVar(&commentTypes, "comment-types", nil, "Filter: comment types (review_body, review_comment, issue_comment)")

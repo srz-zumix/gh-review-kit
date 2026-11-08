@@ -105,6 +105,16 @@ path, include bots, or export JSON. Omitting `PR` uses the current branch.
 
 ### copilot
 
+#### Change Copilot review settings
+
+```sh
+gh review-kit copilot settings set [flags]
+```
+
+Change only the given settings: `--effort` (`inherit` clears it),
+`--severity-filter`, `--custom-instructions`, and `--mcp` for a repository
+(default: current repository), or the default `--effort` with `--org`.
+
 #### List and evaluate Copilot review comments
 
 ```sh
@@ -112,6 +122,9 @@ gh review-kit copilot comments [flags] [-- agent-cli-arg...]
 ```
 
 List Copilot feedback, including resolved or outdated threads when requested.
+Each comment shows the skills, MCP servers, or custom instructions Copilot
+reported as its sources; `--source KIND[:NAME]` or `--source none` filters by
+them, and evaluation output ends with verdict counts per source.
 With `--evaluate` and a required `--prompt` or `--prompt-file`, the Copilot CLI
 (or Claude Code via `--evaluate=claude`) judges each comment against the PR:
 valid comments are resolved as `ADDRESSED`, invalid comments receive a
@@ -150,7 +163,9 @@ gh review-kit copilot review-request [PR_NUMBER] [flags]
 ```
 
 Request a review of the latest commit, optionally forcing a repeat request.
-Omitting the number uses the current branch's PR.
+Use `--effort`/`-e` (for example `lite`, `balanced`, or `max`) to pick the
+review effort; without it the configured default applies. Omitting the number
+uses the current branch's PR.
 
 #### Resolve review threads
 
@@ -161,14 +176,26 @@ gh review-kit copilot resolve COMMENT_ID_OR_URL... [flags]
 Resolve threads by comment ID or URL; use `--unresolve` to reopen them
 (default: resolve).
 
+#### Show Copilot review settings
+
+```sh
+gh review-kit copilot settings view [flags]
+```
+
+Show review effort, available efforts, severity filter, and custom
+instructions/MCP usage for a repository (default: current repository), or the
+default effort with `--org`. Organization settings need a classic token or OAuth
+token; GitHub App and fine-grained tokens are not supported.
+
 #### Show Copilot review status
 
 ```sh
 gh review-kit copilot status [PR_NUMBER] [flags]
 ```
 
-Check whether Copilot has reviewed the latest commit or is still reviewing;
-optionally export JSON. Omitting the number uses the current branch's PR.
+Check whether Copilot has reviewed the latest commit or is still reviewing, and
+which review effort it used; optionally export JSON. Omitting the number uses
+the current branch's PR.
 
 ### insights
 
@@ -223,8 +250,8 @@ write results to a file.
 gh review-kit insights stats --dataset DIR [flags]
 ```
 
-Count feedback by author, type, repository, or other dimensions; choose
-grouping and top-N limits with flags.
+Count feedback by author, type, repository, Copilot source or effort, or other
+dimensions; choose grouping and top-N limits with flags.
 
 #### Suggest coding rules
 

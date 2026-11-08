@@ -119,9 +119,11 @@ func TestEvaluateAllRepliesBeforeVerdict(t *testing.T) {
 							if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 								t.Error(err)
 							}
-							wantBody := map[string]any{"body": reason, "in_reply_to": float64(11), "commit_id": "", "path": ""}
+							wantBody := map[string]any{"body": reason, "in_reply_to": float64(11)}
 							if !reflect.DeepEqual(body, wantBody) {
 								t.Errorf("reply payload = %+v, want %+v", body, wantBody)
+								http.Error(w, `{"message":"Validation Failed","errors":[{"resource":"PullRequestReviewComment","field":"commit_id","code":"invalid"}]}`, http.StatusUnprocessableEntity)
+								return
 							}
 							w.WriteHeader(http.StatusCreated)
 							_, _ = fmt.Fprintf(w, `{"id":301,"html_url":%q}`, replyURL)

@@ -328,12 +328,23 @@ gh review-kit comments list 123 --format json
 #### List Copilot code review comments on a pull request
 
 ```sh
-gh review-kit copilot comments [--repo REPO] [--pr PR] [--author AUTHORS] [--include-resolved] [--include-outdated] [--evaluate[=copilot|claude]] [--alias-set NAME] [--batch] [--prompt PROMPT | --prompt-file FILE] [--bin BIN] [--agent AGENT] [--auto-approve] [--yolo] [--model MODEL] [--evaluate-timeout DURATION] [--sandbox] [--session-id ID] [--rubber-duck] [--language LANGUAGE] [--reply-reason] [--check-worktree] [--dryrun] [--json FIELDS] [-- AGENT_CLI_ARG...]
+gh review-kit copilot comments [--repo REPO] [--pr PR] [--author AUTHORS] [--include-resolved] [--include-outdated] [--source SOURCE] [--evaluate[=copilot|claude]] [--alias-set NAME] [--batch] [--prompt PROMPT | --prompt-file FILE] [--bin BIN] [--agent AGENT] [--auto-approve] [--yolo] [--model MODEL] [--evaluate-timeout DURATION] [--sandbox] [--session-id ID] [--rubber-duck] [--language LANGUAGE] [--reply-reason] [--check-worktree] [--dryrun] [--json FIELDS] [-- AGENT_CLI_ARG...]
 ```
 
 List GitHub Copilot code review comments on a pull request.
 
 By default, resolved and outdated review threads are excluded. Use `--evaluate` to additionally judge each comment with the [Copilot CLI](https://github.com/github/copilot-cli) (or with [Claude Code](https://docs.claude.com/en/docs/claude-code), see `--evaluate=claude`): comments judged invalid receive a thumbs-down reaction and have their review thread resolved with resolution reason `INVALID`; comments judged valid have their review thread resolved with resolution reason `ADDRESSED`; comments judged unclear have their review thread resolved with resolution reason `WONT_FIX` and no reaction. The prompt used to judge comments must be supplied with `--prompt` or `--prompt-file`; gh-review-kit does not ship a built-in evaluation prompt.
+
+Each comment lists the skills, MCP servers, and custom instructions Copilot
+reported as its sources (`sources=` in text output, `sources` in JSON), when
+the server reports them. Use `--source` to keep only comments with a matching
+source: `KIND` matches any source of that kind (`skill`, `mcp`, or
+`custom_instructions`), `KIND:NAME` also matches the source name or path
+(case-insensitive), and `none` matches comments without a reported source.
+`--source` is repeatable, and a comment is kept when any filter matches. With
+`--evaluate`, the text output ends with verdict counts per source, so you can
+see which skills or instructions produce rejected comments; JSON output keeps
+the per-comment `sources`, so the same counts can be computed with `--jq`.
 
 Use `--reply-reason` with `--evaluate` to post each non-empty evaluation reason
 unchanged as a reply in the corresponding review thread before applying
@@ -387,6 +398,9 @@ When run inside a local work tree of the repository, `--evaluate` first checks t
 - `--repo, -R`: Repository in the format 'owner/repo' (optional, defaults to current repository)
 - `--reply-reason, -r`: Post each evaluation reason as a reply in its review
   thread (optional, requires `--evaluate`, default: false)
+- `--source`: Keep only comments whose Copilot code review sources match
+  `KIND`, `KIND:NAME`, or `none`; repeatable, any match keeps the comment
+  (optional, default: no filter)
 - `--rubber-duck`: Ask the Copilot CLI's built-in rubber duck agent for a second opinion before deciding; ignored for Claude Code (optional, default: false)
 - `--sandbox`: Enable the evaluator CLI's OS-level shell sandbox for the evaluation; the Copilot CLI also gets `--experimental` and `--add-dir` for the current directory (optional, default: false)
 - `--session-id`: Session to resume (optional, default: a new session)
@@ -419,6 +433,12 @@ gh review-kit copilot comments --pr 123 --evaluate --prompt-file ./judge-prompt.
 
 # Judge each comment and have the evaluation reason written in Japanese
 gh review-kit copilot comments --pr 123 --evaluate --prompt-file ./judge-prompt.md --language Japanese --auto-approve
+
+# List only comments Copilot attributed to a specific skill
+gh review-kit copilot comments --source skill:example-skill
+
+# List comments not attributed to any skill, MCP server, or custom instructions
+gh review-kit copilot comments --source none
 
 # Post each evaluation reason as a reply in its review thread
 gh review-kit copilot comments --pr 123 --evaluate \
@@ -515,7 +535,7 @@ gh review-kit copilot resolve https://github.com/owner/repo/pull/123#discussion_
 #### Request a GitHub Copilot code review on a pull request
 
 ```sh
-gh review-kit copilot review-request [pull-request-number] [--repo REPO] [--force]
+gh review-kit copilot review-request [pull-request-number] [--repo REPO] [--force] [--effort EFFORT]
 ```
 
 Request a code review from GitHub Copilot on a pull request, the same as requesting a review from a human reviewer. The request is only sent when the pull request is still open and the latest commit has not been reviewed yet:
@@ -530,12 +550,13 @@ Request a code review from GitHub Copilot on a pull request, the same as request
 
 Use `--force` to request a review regardless of that state. `--force` skips the status check entirely, so a review is requested even on a merged or closed pull request.
 
-Copilot's [review effort level](https://docs.github.com/en/copilot/concepts/agents/code-review#review-effort-level) (Lite or Balanced) cannot be selected through this command: neither the REST `requested_reviewers` endpoint nor the GraphQL `requestReviews` mutation exposes a parameter for it, so the pull request's or organization's configured default effort level is always used. Change the default in the repository or organization settings, or select it manually in the pull request's Reviewers section on GitHub.com, if a specific effort level is needed.
+Use `--effort` to choose Copilot's [review effort level](https://docs.github.com/en/copilot/concepts/agents/code-review#review-effort-level) (for example `lite`, `balanced`, or `max`) for this review. The request is then sent through the Copilot code review API (`POST /repos/{owner}/{repo}/pulls/{pull_number}/copilot-code-review`), which accepts only the effort levels available on the repository (see `copilot settings view`) and rejects a request while another Copilot review request is pending. Without `--effort`, Copilot is added as a requested reviewer and the configured default effort level is used.
 
 **Aliases:** `rr`
 
 **Options:**
 
+- `--effort, -e`: Review effort level for this review, e.g. `lite`, `balanced`, `max` (optional, default: the configured default effort level)
 - `--force`: Request a review even when the latest commit has already been reviewed (optional, default: false)
 - `--repo, -R`: Repository in the format 'owner/repo' (optional, defaults to current repository)
 
@@ -550,6 +571,76 @@ gh review-kit copilot rr 123 --repo owner/repo
 
 # Request a review even though the latest commit has already been reviewed
 gh review-kit copilot review-request --force
+
+# Request a thorough review with the max effort level
+gh review-kit copilot review-request 123 --effort max
+```
+
+#### Change GitHub Copilot code review settings of a repository or organization
+
+```sh
+gh review-kit copilot settings set [--repo REPO | --org ORG] [--effort EFFORT] [--severity-filter FILTER] [--custom-instructions[=true|false]] [--mcp[=true|false]] [--format json]
+```
+
+Change the Copilot code review settings of a repository or an organization. Only the flags you pass are changed, and at least one is required. For a repository you can set `--effort`, `--severity-filter`, `--custom-instructions`, and `--mcp`. With `--org` only `--effort` is accepted, and it sets the organization's default review effort. Pass `--effort inherit` to clear the configured value and fall back to the inherited default. The updated settings are printed.
+
+`--severity-filter` chooses which comment severities Copilot leaves out: `no_filter` keeps every comment, `low` leaves out low-severity comments, and `low_and_medium` leaves out low- and medium-severity comments.
+
+Repository settings need the Administration permission (write) on the repository. Organization endpoints require a classic personal access token or an OAuth token (for example `gh auth login`) with the `manage_billing:copilot` or `read:org`/`admin:org` scope; GitHub App tokens and fine-grained personal access tokens are not supported, and a 403 response is reported with that hint.
+
+**Options:**
+
+- `--custom-instructions`: Use repository custom instructions in Copilot code review (optional, default: unchanged)
+- `--effort, -e`: Review effort, e.g. `lite`, `balanced`, `max`, or `inherit` to clear it (optional, default: unchanged)
+- `--format`: Output format: `json` (optional; omit for text output)
+- `--mcp`: Use MCP servers in Copilot code review (optional, default: unchanged)
+- `--org`: Organization in the format '[HOST/]ORG' (optional, mutually exclusive with `--repo`)
+- `--repo, -R`: Repository in the format 'owner/repo' (optional, defaults to current repository)
+- `--severity-filter`: Comment severities to leave out: `no_filter`, `low`, `low_and_medium` (optional, default: unchanged)
+
+**Examples:**
+
+```sh
+# Use the max review effort on the current repository
+gh review-kit copilot settings set --effort max
+
+# Leave out low-severity comments and stop using MCP servers
+gh review-kit copilot settings set --repo owner/repo --severity-filter low --mcp=false
+
+# Clear the repository effort so the organization default applies
+gh review-kit copilot settings set --effort inherit
+
+# Set the default review effort of an organization
+gh review-kit copilot settings set --org example-org --effort balanced
+```
+
+#### Show GitHub Copilot code review settings of a repository or organization
+
+```sh
+gh review-kit copilot settings view [--repo REPO | --org ORG] [--format json]
+```
+
+Show the Copilot code review settings of a repository or an organization. For a repository, the output includes the configured and effective review effort, the available review efforts, the severity filter, and whether custom instructions and MCP servers are used. With `--org`, the output shows the organization's default review effort, the GitHub default, whether it can be edited, and who manages it.
+
+Repository settings need the Administration permission (read) on the repository. Organization endpoints require a classic personal access token or an OAuth token (for example `gh auth login`) with the `manage_billing:copilot` or `read:org`/`admin:org` scope; GitHub App tokens and fine-grained personal access tokens are not supported, and a 403 response is reported with that hint.
+
+**Options:**
+
+- `--format`: Output format: `json` (optional; omit for text output)
+- `--org`: Organization in the format '[HOST/]ORG' (optional, mutually exclusive with `--repo`)
+- `--repo, -R`: Repository in the format 'owner/repo' (optional, defaults to current repository)
+
+**Examples:**
+
+```sh
+# Show the settings of the current repository
+gh review-kit copilot settings view
+
+# List the review efforts available on a repository
+gh review-kit copilot settings view --repo owner/repo --format json --jq '.available_review_efforts[]'
+
+# Show the default review effort of an organization
+gh review-kit copilot settings view --org example-org
 ```
 
 #### Show the GitHub Copilot code review status of a pull request
@@ -574,6 +665,8 @@ The reported status is one of:
 | `closed` | The pull request is closed without being merged |
 
 `merged` and `closed` take precedence over everything else, so a stale pull request that happens to share the branch name is not reported with its old review state. Otherwise, a pending review request takes precedence, so a pull request that Copilot has already reviewed and is reviewing again is reported as `in_progress`.
+
+`last_review_effort` shows the review effort level Copilot used for its latest review, when the server reports it. Reviews are recognized as Copilot's by the server's `is_copilot_code_review` attribution when available, and by the reviewer login otherwise.
 
 `head_reviewed` tells whether Copilot reviewed the latest commit of the pull request. A `false` means every review it submitted predates the newest push, so the current code has not been reviewed yet.
 
@@ -651,6 +744,8 @@ The dataset directory is the unit shared by every `insights` subcommand and cont
 
 Re-running with the same `--dataset` resumes from the checkpoint and skips PRs already recorded. Pass `--update` to additionally re-fetch PRs whose `updated_at` advanced since the last run; their existing PR and comment records are atomically replaced. Conservative secret/token redaction is applied by default; pass `--no-redact` to opt out.
 
+Records from Copilot code review carry the server's attribution when it is reported: `is_copilot_code_review`, `copilot_code_review_effort` (inline comments inherit their review's effort), and `copilot_code_review_sources` (the skills, MCP servers, and custom instructions behind an inline comment). These fields are omitted when absent, so older datasets stay valid. Copilot is a bot, so pass `--include-bots` to keep its comments.
+
 **Options:**
 
 - `--comment-types`: Comment types to extract (optional, default: all). Allowed: `review_body`, `review_comment`, `issue_comment`
@@ -724,11 +819,13 @@ gh review-kit insights stats --dataset DIR [--group-by KEY] [--top N] [--min-cou
 
 Aggregate counts over a comments dataset and rank rows by frequency. Useful before LLM/Agent analysis to pick high-value slices instead of reading every record.
 
+`copilot_source` groups Copilot code review comments by each reported source (`KIND:NAME`, with the path for custom instructions), and `copilot_effort` groups records by the Copilot review effort. Records without attribution fall into `(none)`, including datasets extracted before attribution was recorded; extract into a new dataset to record it, since `--update` re-fetches only PRs whose `updated_at` advanced.
+
 **Options:**
 
 - `--dataset`: Dataset directory (required)
 - `--format`: Output format: `text`, `json` (optional, default: `text`)
-- `--group-by`: Grouping key: `comment_type`, `repo`, `author`, `review_state`, `path_prefix`, `label` (optional, default: `comment_type`)
+- `--group-by`: Grouping key: `comment_type`, `repo`, `author`, `review_state`, `path_prefix`, `label`, `copilot_source`, `copilot_effort` (optional, default: `comment_type`)
 - `--min-count`: Drop rows with fewer than this many records (optional, default: 0)
 - `--top`: Keep only the top N rows after sorting (optional, default: 0 = keep all)
 
@@ -743,6 +840,9 @@ gh review-kit insights stats --dataset ./dataset --group-by author --top 20
 
 # Top path prefixes among inline comments, JSON output
 gh review-kit insights stats --dataset ./dataset --group-by path_prefix --top 30 --format json
+
+# Which skills, MCP servers, and instructions drive Copilot comments
+gh review-kit insights stats --dataset ./dataset --group-by copilot_source
 ```
 
 #### Pick representative comments from a dataset
@@ -768,7 +868,7 @@ Strategies:
 - `--comment-types`: Filter by comment types (optional). Allowed: `review_body`, `review_comment`, `issue_comment`
 - `--dataset`: Dataset directory (required)
 - `--format`: Output format: `jsonl`, `json` (optional, default: `jsonl`)
-- `--group-by`: Grouping key (optional, default: empty = single group). Allowed: `comment_type`, `repo`, `author`, `review_state`, `path_prefix`, `label`
+- `--group-by`: Grouping key (optional, default: empty = single group). Allowed: `comment_type`, `repo`, `author`, `review_state`, `path_prefix`, `label`, `copilot_source`, `copilot_effort`
 - `--include-bots`: Include bot-authored comments (optional, default: false)
 - `--min-length`: Minimum trimmed body length in bytes (optional, default: 0)
 - `--output`: Output file path (optional, default: stdout)
@@ -816,7 +916,7 @@ Split a comments dataset into smaller JSONL bundles for parallel LLM/Agent analy
 - `--comment-types`: Filter by comment types (optional). Allowed: `review_body`, `review_comment`, `issue_comment`
 - `--dataset`: Dataset directory (required)
 - `--format`: Summary format: `text`, `json` (optional, default: `text`)
-- `--group-by`: Grouping key (optional, default: empty = single stream). Allowed: `comment_type`, `repo`, `author`, `review_state`, `path_prefix`, `label`
+- `--group-by`: Grouping key (optional, default: empty = single stream). Allowed: `comment_type`, `repo`, `author`, `review_state`, `path_prefix`, `label`, `copilot_source`, `copilot_effort`
 - `--include-bots`: Include bot-authored comments (optional, default: false)
 - `--max-bytes`: Maximum bytes per bundle (optional, default: 0 = no byte cap)
 - `--max-records`: Maximum records per bundle (optional, default: 0 = no record cap)

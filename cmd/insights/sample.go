@@ -96,7 +96,7 @@ Strategies:
 
 	f := cmd.Flags()
 	f.StringVar(&dataset, "dataset", "", "Dataset directory (required)")
-	f.StringVar(&groupBy, "group-by", "", "Grouping key: comment_type, repo, author, review_state, path_prefix, label (empty = single group)")
+	f.StringVar(&groupBy, "group-by", "", "Grouping key: comment_type, repo, author, review_state, path_prefix, label, copilot_source, copilot_effort (empty = single group)")
 	f.IntVar(&perGroup, "per-group", 5, "Records to keep per group")
 	f.StringVar(&strategy, "strategy", "recent", "Selection strategy: recent, diverse-authors, blocking, random")
 	f.Int64Var(&seed, "seed", 0, "Random seed when --strategy=random (0 = time-based)")

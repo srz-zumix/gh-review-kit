@@ -168,19 +168,19 @@ func fetchPRComments(ctx context.Context, client *gh.GitHubClient, repo reposito
 	var comments []*Comment
 
 	// Fetch reviews once when either review bodies or inline review comments are
-	// requested. The review ID -> state map lets inline review_comment records
+	// requested. The review ID -> review map lets inline review_comment records
 	// inherit their review's state (e.g. CHANGES_REQUESTED), which powers the
-	// blocking strategy and review-state filters.
-	var reviews []*github.PullRequestReview
-	reviewStates := map[int64]string{}
+	// blocking strategy and review-state filters, and its Copilot review effort.
+	var reviews []*gh.CopilotAttributedPullRequestReview
+	reviewByID := map[int64]*gh.CopilotAttributedPullRequestReview{}
 	if commentTypes[CommentTypeReviewBody] || commentTypes[CommentTypeReviewComment] {
-		rv, err := gh.GetPullRequestReviews(ctx, client, repo, pr)
+		rv, err := gh.ListPullRequestReviewsWithCopilotAttribution(ctx, client, repo, pr)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get reviews: %w", err)
 		}
 		reviews = rv
 		for _, r := range reviews {
-			reviewStates[r.GetID()] = r.GetState()
+			reviewByID[r.GetID()] = r
 		}
 	}
 
@@ -193,12 +193,12 @@ func fetchPRComments(ctx context.Context, client *gh.GitHubClient, repo reposito
 	}
 
 	if commentTypes[CommentTypeReviewComment] {
-		rc, err := gh.ListPullRequestReviewComments(ctx, client, repo, pr)
+		rc, err := gh.ListPullRequestReviewCommentsWithCopilotAttribution(ctx, client, repo, pr)
 		if err != nil {
 			return nil, fmt.Errorf("failed to list review comments: %w", err)
 		}
 		for _, c := range rc {
-			if rec := toReviewCommentRecord(repoKey, pr, c, reviewStates, opts); rec != nil {
+			if rec := toReviewCommentRecord(repoKey, pr, c, reviewByID, opts); rec != nil {
 				comments = append(comments, rec)
 			}
 		}
@@ -297,7 +297,7 @@ func toPRRecord(repoKey string, pr *github.PullRequest) *PR {
 	return rec
 }
 
-func toReviewBodyRecord(repoKey string, pr *github.PullRequest, rv *github.PullRequestReview, opts ExtractOptions) *Comment {
+func toReviewBodyRecord(repoKey string, pr *github.PullRequest, rv *gh.CopilotAttributedPullRequestReview, opts ExtractOptions) *Comment {
 	body := rv.GetBody()
 	if strings.TrimSpace(body) == "" {
 		// Skip approve-only reviews with no narrative.
@@ -325,10 +325,28 @@ func toReviewBodyRecord(repoKey string, pr *github.PullRequest, rv *github.PullR
 		CreatedAt:    created,
 		ReviewID:     rv.GetID(),
 		ReviewState:  rv.GetState(),
+
+		IsCopilotCodeReview:     rv.IsCopilotCodeReview != nil && *rv.IsCopilotCodeReview,
+		CopilotCodeReviewEffort: valueOrEmpty(rv.CopilotCodeReviewEffort),
 	}
 }
 
-func toReviewCommentRecord(repoKey string, pr *github.PullRequest, c *github.PullRequestComment, reviewStates map[int64]string, opts ExtractOptions) *Comment {
+// reviewState returns the state of review, or "" when the review is unknown.
+func reviewState(review *gh.CopilotAttributedPullRequestReview) string {
+	if review == nil {
+		return ""
+	}
+	return review.GetState()
+}
+
+func valueOrEmpty(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
+func toReviewCommentRecord(repoKey string, pr *github.PullRequest, c *gh.CopilotAttributedPullRequestComment, reviews map[int64]*gh.CopilotAttributedPullRequestReview, opts ExtractOptions) *Comment {
 	if !opts.IncludeBots && isBotUser(c.GetUser()) {
 		return nil
 	}
@@ -339,6 +357,7 @@ func toReviewCommentRecord(repoKey string, pr *github.PullRequest, c *github.Pul
 	if !lengthOK(body, opts.MinLength) {
 		return nil
 	}
+	review := reviews[c.GetPullRequestReviewID()]
 	rec := &Comment{
 		ID:           c.GetID(),
 		NodeID:       c.GetNodeID(),
@@ -352,13 +371,19 @@ func toReviewCommentRecord(repoKey string, pr *github.PullRequest, c *github.Pul
 		URL:          c.GetHTMLURL(),
 		CreatedAt:    c.GetCreatedAt().Time,
 		ReviewID:     c.GetPullRequestReviewID(),
-		ReviewState:  reviewStates[c.GetPullRequestReviewID()],
+		ReviewState:  reviewState(review),
 		Path:         c.GetPath(),
 		Line:         c.GetLine(),
 		OriginalLine: c.GetOriginalLine(),
 		Side:         c.GetSide(),
 		DiffHunk:     c.GetDiffHunk(),
 		InReplyTo:    c.GetInReplyTo(),
+
+		IsCopilotCodeReview:      c.IsCopilotCodeReview != nil && *c.IsCopilotCodeReview,
+		CopilotCodeReviewSources: c.CopilotCodeReviewSources,
+	}
+	if review != nil {
+		rec.CopilotCodeReviewEffort = valueOrEmpty(review.CopilotCodeReviewEffort)
 	}
 	if c.UpdatedAt != nil {
 		t := c.GetUpdatedAt().Time

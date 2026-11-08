@@ -19,6 +19,7 @@ resolve the thread for comments judged incorrect.`,
 	cmd.AddCommand(copilot.NewFeedbackCmd())
 	cmd.AddCommand(copilot.NewResolveCmd())
 	cmd.AddCommand(copilot.NewReviewRequestCmd())
+	cmd.AddCommand(copilot.NewSettingsCmd())
 	cmd.AddCommand(copilot.NewStatusCmd())
 
 	return cmd
