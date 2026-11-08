@@ -45,6 +45,12 @@ new dataset to record it. Copilot comments are bot comments, so extract with
 				GroupBy:  groupBy,
 				Top:      top,
 				MinCount: minCount,
+				// Copilot code review comments are bot-authored; keep bot
+				// records for the Copilot attribution groupings so they are
+				// not discarded before grouping.
+				Filters: insights.SampleFilters{
+					IncludeBots: groupBy == "copilot_source" || groupBy == "copilot_effort",
+				},
 			})
 			if err != nil {
 				return fmt.Errorf("failed to compute stats for dataset %q: %w", dataset, err)

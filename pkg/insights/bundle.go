@@ -2,6 +2,8 @@ package insights
 
 import (
 	"bufio"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -21,10 +23,10 @@ type BundleOptions struct {
 
 // BundleManifest describes the output of Bundle.
 type BundleManifest struct {
-	Dataset   string         `json:"dataset"`
-	GroupBy   string         `json:"group_by,omitempty"`
-	CreatedAt time.Time      `json:"created_at"`
-	Bundles   []BundleEntry  `json:"bundles"`
+	Dataset   string        `json:"dataset"`
+	GroupBy   string        `json:"group_by,omitempty"`
+	CreatedAt time.Time     `json:"created_at"`
+	Bundles   []BundleEntry `json:"bundles"`
 }
 
 // BundleEntry describes a single bundle file.
@@ -186,7 +188,7 @@ func (b *bundleWriter) openNext() error {
 	b.index++
 	name := fmt.Sprintf("bundle-%04d.jsonl", b.index)
 	if b.group != "" {
-		name = fmt.Sprintf("%s-%04d.jsonl", sanitizeName(b.group), b.index)
+		name = fmt.Sprintf("%s-%04d.jsonl", bundleGroupName(b.group), b.index)
 	}
 	path := filepath.Join(b.dir, name)
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
@@ -227,6 +229,18 @@ func (b *bundleWriter) closeCurrent() (*BundleEntry, error) {
 	}
 	b.curFile = nil
 	return entry, nil
+}
+
+// bundleGroupName returns a filename-safe name for a group key. When
+// sanitization changes the key, a short hash of the raw key is appended so
+// that distinct keys (e.g. "foo.bar" and "foo_bar") never share a file.
+func bundleGroupName(group string) string {
+	name := sanitizeName(group)
+	if name == group {
+		return name
+	}
+	sum := sha256.Sum256([]byte(group))
+	return fmt.Sprintf("%s-%s", name, hex.EncodeToString(sum[:4]))
 }
 
 func sanitizeName(s string) string {
