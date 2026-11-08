@@ -235,17 +235,17 @@ func (b *bundleWriter) closeCurrent() (*BundleEntry, error) {
 // maxBundleGroupNameLen bounds the readable prefix of a bundle group name so
 // that "<prefix>-<hash>-NNNN.jsonl" stays well below the common 255-byte
 // filename component limit.
-const maxBundleGroupNameLen = 200
+const maxBundleGroupNameLen = 160
 
-// hashSuffixPattern matches names that already end with the "-<8 hex>" suffix
+// hashSuffixPattern matches names that already end with the "-<64 hex>" (full SHA-256) suffix
 // appended by bundleGroupName. Such raw keys must also be hashed so that they
 // cannot collide with a sanitized key's output.
-var hashSuffixPattern = regexp.MustCompile(`-[0-9a-f]{8}$`)
+var hashSuffixPattern = regexp.MustCompile(`-[0-9a-f]{64}$`)
 
 // bundleGroupName returns a filename-safe name for a group key. When
 // sanitization changes the key, the key is too long, or the key already looks
-// like a hashed name, a short hash of the raw key is appended so that distinct
-// keys (e.g. "foo.bar", "foo_bar" and "foo_bar-2595d08a") never share a file.
+// like a hashed name, the full SHA-256 hex digest of the raw key is appended so that distinct
+// keys (e.g. "foo.bar", "foo_bar" and "foo_bar-<64 hex>") never share a file.
 func bundleGroupName(group string) string {
 	name := sanitizeName(group)
 	if name == group && len(name) <= maxBundleGroupNameLen && !hashSuffixPattern.MatchString(name) {
@@ -255,7 +255,7 @@ func bundleGroupName(group string) string {
 		name = name[:maxBundleGroupNameLen]
 	}
 	sum := sha256.Sum256([]byte(group))
-	return fmt.Sprintf("%s-%s", name, hex.EncodeToString(sum[:4]))
+	return fmt.Sprintf("%s-%s", name, hex.EncodeToString(sum[:]))
 }
 
 func sanitizeName(s string) string {
