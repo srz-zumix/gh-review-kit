@@ -105,7 +105,7 @@ func prKey(repo string, number int) string {
 
 // StatsOptions configures Stats.
 type StatsOptions struct {
-	GroupBy  string // repo|author|review_state|comment_type|path_prefix|label
+	GroupBy  string // one of GroupByKeys
 	Top      int
 	MinCount int
 	Filters  SampleFilters
@@ -226,6 +226,9 @@ func Stats(dir string, opts StatsOptions) (*StatsResult, error) {
 	return &StatsResult{Dataset: dir, GroupBy: opts.GroupBy, Rows: rows}, nil
 }
 
+// GroupByKeys lists the grouping keys accepted by stats, sample, and bundle.
+var GroupByKeys = []string{"comment_type", "repo", "author", "review_state", "path_prefix", "label", "copilot_source", "copilot_effort"}
+
 func groupKeyFn(group string) (func(c *Comment, prLabels map[string][]string) []string, error) {
 	switch group {
 	case "comment_type":
@@ -257,8 +260,31 @@ func groupKeyFn(group string) (func(c *Comment, prLabels map[string][]string) []
 			}
 			return labels
 		}, nil
+	case "copilot_source":
+		return func(c *Comment, _ map[string][]string) []string {
+			if len(c.CopilotCodeReviewSources) == 0 {
+				return []string{"(none)"}
+			}
+			seen := map[string]bool{}
+			var keys []string
+			for _, src := range c.CopilotCodeReviewSources {
+				k := src.String()
+				if !seen[k] {
+					seen[k] = true
+					keys = append(keys, k)
+				}
+			}
+			return keys
+		}, nil
+	case "copilot_effort":
+		return func(c *Comment, _ map[string][]string) []string {
+			if c.CopilotCodeReviewEffort == "" {
+				return []string{"(none)"}
+			}
+			return []string{c.CopilotCodeReviewEffort}
+		}, nil
 	default:
-		return nil, fmt.Errorf("unknown group-by %q (allowed: comment_type, repo, author, review_state, path_prefix, label)", group)
+		return nil, fmt.Errorf("unknown group-by %q (allowed: %s)", group, strings.Join(GroupByKeys, ", "))
 	}
 }
 

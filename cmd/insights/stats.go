@@ -27,8 +27,15 @@ func NewStatsCmd() *cobra.Command {
 		Long: `Aggregate counts over a comments dataset.
 
 Group records by --group-by (comment_type, repo, author, review_state,
-path_prefix, label) and rank by frequency. Use --top to keep only the highest
-ranked rows and --min-count to drop noise.`,
+path_prefix, label, copilot_source, copilot_effort) and rank by frequency. Use
+--top to keep only the highest ranked rows and --min-count to drop noise.
+
+copilot_source groups Copilot code review comments by the skill, MCP server, or
+custom instructions file Copilot reported as their source, and copilot_effort
+groups by the review effort. Records without attribution, including datasets
+extracted before attribution was recorded, fall into "(none)"; extract into a
+new dataset to record it. Copilot comments are bot comments, so extract with
+--include-bots to keep them.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if dataset == "" {
@@ -38,6 +45,12 @@ ranked rows and --min-count to drop noise.`,
 				GroupBy:  groupBy,
 				Top:      top,
 				MinCount: minCount,
+				// Copilot code review comments are bot-authored; keep bot
+				// records for the Copilot attribution groupings so they are
+				// not discarded before grouping.
+				Filters: insights.SampleFilters{
+					IncludeBots: groupBy == "copilot_source" || groupBy == "copilot_effort",
+				},
 			})
 			if err != nil {
 				return fmt.Errorf("failed to compute stats for dataset %q: %w", dataset, err)
@@ -52,7 +65,7 @@ ranked rows and --min-count to drop noise.`,
 
 	f := cmd.Flags()
 	f.StringVar(&dataset, "dataset", "", "Dataset directory (required)")
-	f.StringVar(&groupBy, "group-by", "comment_type", "Grouping key: comment_type, repo, author, review_state, path_prefix, label")
+	f.StringVar(&groupBy, "group-by", "comment_type", "Grouping key: comment_type, repo, author, review_state, path_prefix, label, copilot_source, copilot_effort")
 	f.IntVar(&top, "top", 0, "Keep only the top N rows after sorting (0 = keep all)")
 	f.IntVar(&minCount, "min-count", 0, "Drop rows with fewer than this many records")
 	if err := cmdflags.AddFormatFlags(cmd, &exporter, &format, "text", []string{"text"}); err != nil {

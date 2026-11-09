@@ -2,10 +2,13 @@ package insights
 
 import (
 	"bufio"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"time"
 )
@@ -21,10 +24,10 @@ type BundleOptions struct {
 
 // BundleManifest describes the output of Bundle.
 type BundleManifest struct {
-	Dataset   string         `json:"dataset"`
-	GroupBy   string         `json:"group_by,omitempty"`
-	CreatedAt time.Time      `json:"created_at"`
-	Bundles   []BundleEntry  `json:"bundles"`
+	Dataset   string        `json:"dataset"`
+	GroupBy   string        `json:"group_by,omitempty"`
+	CreatedAt time.Time     `json:"created_at"`
+	Bundles   []BundleEntry `json:"bundles"`
 }
 
 // BundleEntry describes a single bundle file.
@@ -186,7 +189,7 @@ func (b *bundleWriter) openNext() error {
 	b.index++
 	name := fmt.Sprintf("bundle-%04d.jsonl", b.index)
 	if b.group != "" {
-		name = fmt.Sprintf("%s-%04d.jsonl", sanitizeName(b.group), b.index)
+		name = fmt.Sprintf("%s-%04d.jsonl", bundleGroupName(b.group), b.index)
 	}
 	path := filepath.Join(b.dir, name)
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
@@ -227,6 +230,32 @@ func (b *bundleWriter) closeCurrent() (*BundleEntry, error) {
 	}
 	b.curFile = nil
 	return entry, nil
+}
+
+// maxBundleGroupNameLen bounds the readable prefix of a bundle group name so
+// that "<prefix>-<hash>-NNNN.jsonl" stays well below the common 255-byte
+// filename component limit.
+const maxBundleGroupNameLen = 160
+
+// hashSuffixPattern matches names that already end with the "-<64 hex>" (full SHA-256) suffix
+// appended by bundleGroupName. Such raw keys must also be hashed so that they
+// cannot collide with a sanitized key's output.
+var hashSuffixPattern = regexp.MustCompile(`-[0-9a-f]{64}$`)
+
+// bundleGroupName returns a filename-safe name for a group key. When
+// sanitization changes the key, the key is too long, or the key already looks
+// like a hashed name, the full SHA-256 hex digest of the raw key is appended so that distinct
+// keys (e.g. "foo.bar", "foo_bar" and "foo_bar-<64 hex>") never share a file.
+func bundleGroupName(group string) string {
+	name := sanitizeName(group)
+	if name == group && len(name) <= maxBundleGroupNameLen && !hashSuffixPattern.MatchString(name) {
+		return name
+	}
+	if len(name) > maxBundleGroupNameLen {
+		name = name[:maxBundleGroupNameLen]
+	}
+	sum := sha256.Sum256([]byte(group))
+	return fmt.Sprintf("%s-%s", name, hex.EncodeToString(sum[:]))
 }
 
 func sanitizeName(s string) string {

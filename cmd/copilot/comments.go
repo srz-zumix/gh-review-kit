@@ -44,6 +44,7 @@ func NewCommentsCmd() *cobra.Command {
 		language        string
 		replyReason     bool
 		checkWorktree   bool
+		sources         []string
 		opts            struct{ Exporter cmdutil.Exporter }
 	)
 
@@ -52,9 +53,18 @@ func NewCommentsCmd() *cobra.Command {
 		Short: "List Copilot code review comments on a pull request",
 		Long: `List GitHub Copilot code review comments on a pull request.
 
-By default, resolved and outdated review threads are excluded. Use --evaluate
-to additionally judge each comment with the Copilot CLI (or with Claude Code,
-see --evaluate=claude): comments judged invalid receive a thumbs-down reaction and
+By default, resolved and outdated review threads are excluded. Each comment
+lists the skills, MCP servers, and custom instructions Copilot reported as its
+sources, when the server reports them. Use --source to keep only comments with
+a matching source: KIND matches any source of that kind (skill, mcp, or
+custom_instructions), KIND:NAME also matches the source name or path, and none
+matches comments without a reported source. --source is repeatable and a
+comment is kept when any filter matches. With --evaluate, the text output ends
+with verdict counts per source, so you can see which skills or instructions
+produce rejected comments.
+
+Use --evaluate to additionally judge each comment with the Copilot CLI (or with
+Claude Code, see --evaluate=claude): comments judged invalid receive a thumbs-down reaction and
 have their review thread resolved,
 while comments judged valid have their review thread resolved without a
 reaction, and comments judged unclear have their review thread resolved as
@@ -192,6 +202,10 @@ skip the check.`,
 				return nil
 			}
 
+			sourceFilters, err := pkgcopilot.ParseSourceFilters(sources)
+			if err != nil {
+				return fmt.Errorf("invalid --source value: %w", err)
+			}
 			evaluate := cmd.Flags().Changed("evaluate")
 			if err := pkgcopilot.ValidateReplyReasonOption(evaluate, replyReason); err != nil {
 				return err
@@ -228,6 +242,8 @@ skip the check.`,
 				Authors:         authors,
 				IncludeResolved: includeResolved,
 				IncludeOutdated: includeOutdated,
+				WithAttribution: true,
+				Sources:         sourceFilters,
 			})
 			if err != nil {
 				return fmt.Errorf("failed to list copilot review comments for pull request #%d: %w", pr.GetNumber(), err)
@@ -377,6 +393,8 @@ skip the check.`,
 	f.StringSliceVar(&authors, "author", nil, "Comment author logins to match (default: the Copilot code review bot)")
 	f.BoolVar(&includeResolved, "include-resolved", false, "Include comments whose review thread is already resolved")
 	f.BoolVar(&includeOutdated, "include-outdated", false, "Include comments whose review thread is outdated")
+	f.StringSliceVar(&sources, "source", nil, "Keep only comments whose Copilot code review sources match KIND or KIND:NAME (KIND: skill, mcp, custom_instructions), or none for comments without sources")
+	_ = cmd.RegisterFlagCompletionFunc("source", cobra.FixedCompletions(pkgcopilot.SourceFilterKinds, cobra.ShellCompDirectiveNoFileComp))
 	f.StringVar(&evaluatorName, "evaluate", "", "Judge each comment with the Copilot CLI or Claude Code and act on the verdict; use --evaluate=copilot|claude to pick the CLI (default: copilot)")
 	f.Lookup("evaluate").NoOptDefVal = string(pkgcopilot.EvaluatorCopilot)
 	f.BoolVar(&batch, "batch", true, "Judge every comment with a single CLI invocation instead of one per comment")

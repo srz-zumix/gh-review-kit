@@ -3,7 +3,11 @@
 // thread resolution).
 package copilot
 
-import "time"
+import (
+	"time"
+
+	"github.com/srz-zumix/go-gh-extension/pkg/gh"
+)
 
 // DefaultAuthor is the bot login used by GitHub Copilot code review. The
 // GraphQL API returns this login without the "[bot]" suffix used elsewhere.
@@ -39,6 +43,10 @@ type Comment struct {
 	IsResolved bool      `json:"is_resolved"`
 	IsOutdated bool      `json:"is_outdated"`
 	CreatedAt  time.Time `json:"created_at"`
+	// IsCopilotCodeReview and Sources are Copilot code review attribution
+	// fields, set only when attribution is requested and the server reports it.
+	IsCopilotCodeReview *bool                        `json:"is_copilot_code_review,omitempty"`
+	Sources             []gh.CopilotCodeReviewSource `json:"sources,omitempty"`
 	// RootCommentID identifies the top-level comment that accepts thread replies.
 	RootCommentID int64 `json:"-"`
 }

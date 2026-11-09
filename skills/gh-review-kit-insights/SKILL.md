@@ -163,6 +163,8 @@ gh review-kit insights estimate --repo owner/repo --format json
 
 Extract pull request review feedback into a dataset directory. Subsequent commands operate on this directory.
 
+Records from Copilot code review carry the server's attribution when it is reported: `is_copilot_code_review`, `copilot_code_review_effort` (inline comments inherit their review's effort), and `copilot_code_review_sources` (the skills, MCP servers, and custom instructions behind an inline comment). These fields are omitted when absent, so older datasets stay valid. Copilot is a bot, so pass `--include-bots` to keep its comments.
+
 ```bash
 gh review-kit insights extract --dataset DIR [flags]
 ```
@@ -240,6 +242,8 @@ gh review-kit insights validate --dataset ./dataset --format json
 
 Aggregate counts over a comments dataset and rank rows by frequency. Useful before LLM/Agent analysis to pick high-value slices.
 
+`copilot_source` groups Copilot code review comments by each reported source (`KIND:NAME`, with the path for custom instructions), and `copilot_effort` groups records by the Copilot review effort. Records without attribution fall into `(none)`, including datasets extracted before attribution was recorded; extract into a new dataset to record it, since `--update` re-fetches only PRs whose `updated_at` advanced.
+
 ```bash
 gh review-kit insights stats --dataset DIR [flags]
 ```
@@ -250,7 +254,7 @@ gh review-kit insights stats --dataset DIR [flags]
 | --- | --- |
 | `--dataset` | Dataset directory (required) |
 | `--format` | Output format: `text`, `json` (default: `text`) |
-| `--group-by` | Grouping key: `comment_type`, `repo`, `author`, `review_state`, `path_prefix`, `label` (default: `comment_type`) |
+| `--group-by` | Grouping key: `comment_type`, `repo`, `author`, `review_state`, `path_prefix`, `label`, `copilot_source`, `copilot_effort` (default: `comment_type`) |
 | `--min-count` | Drop rows with fewer than this many records (default: 0) |
 | `--top` | Keep only the top N rows after sorting (default: 0 = keep all) |
 
@@ -265,6 +269,9 @@ gh review-kit insights stats --dataset ./dataset --group-by author --top 20
 
 # Top path prefixes among inline comments, JSON output
 gh review-kit insights stats --dataset ./dataset --group-by path_prefix --top 30 --format json
+
+# Which skills, MCP servers, and instructions drive Copilot comments
+gh review-kit insights stats --dataset ./dataset --group-by copilot_source
 ```
 
 ## Pick Representative Comments (insights sample)
@@ -283,7 +290,7 @@ gh review-kit insights sample --dataset DIR [flags]
 | `--comment-types` | Filter by comment types (review_body, review_comment, issue_comment) |
 | `--dataset` | Dataset directory (required) |
 | `--format` | Output format: `jsonl`, `json` (default: `jsonl`) |
-| `--group-by` | Grouping key: `comment_type`, `repo`, `author`, `review_state`, `path_prefix`, `label` (empty = single group) |
+| `--group-by` | Grouping key: `comment_type`, `repo`, `author`, `review_state`, `path_prefix`, `label`, `copilot_source`, `copilot_effort` (empty = single group) |
 | `--include-bots` | Include bot-authored comments (default: false) |
 | `--min-length` | Minimum trimmed body length in bytes (default: 0) |
 | `--output` | Output file path (default: stdout) |
@@ -331,7 +338,7 @@ gh review-kit insights bundle --dataset DIR --output-dir DIR [flags]
 | `--comment-types` | Filter by comment types (review_body, review_comment, issue_comment) |
 | `--dataset` | Dataset directory (required) |
 | `--format` | Summary format: `text`, `json` (default: `text`) |
-| `--group-by` | Grouping key: `comment_type`, `repo`, `author`, `review_state`, `path_prefix`, `label` (empty = single stream) |
+| `--group-by` | Grouping key: `comment_type`, `repo`, `author`, `review_state`, `path_prefix`, `label`, `copilot_source`, `copilot_effort` (empty = single stream) |
 | `--include-bots` | Include bot-authored comments (default: false) |
 | `--max-bytes` | Maximum bytes per bundle (default: 0 = no byte cap) |
 | `--max-records` | Maximum records per bundle (default: 0 = no record cap) |

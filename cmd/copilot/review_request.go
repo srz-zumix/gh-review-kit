@@ -14,8 +14,9 @@ import (
 // NewReviewRequestCmd creates a new command to request a GitHub Copilot code review on a pull request.
 func NewReviewRequestCmd() *cobra.Command {
 	var (
-		repo  string
-		force bool
+		repo   string
+		force  bool
+		effort string
 	)
 
 	cmd := &cobra.Command{
@@ -37,6 +38,11 @@ commit has not been reviewed yet:
 Use --force to request a review regardless of that state. --force skips the
 status check entirely, so a review is requested even on a merged or closed
 pull request.
+
+Use --effort to choose the review effort level (for example lite, balanced, or
+max) for this review. The request is then sent through the Copilot code review
+API, which accepts only the effort levels available to you on the repository.
+Without --effort the review uses the default effort level.
 
 If pull-request-number is omitted, the pull request for the current branch is used.`,
 		Args: cobra.MaximumNArgs(1),
@@ -75,6 +81,14 @@ If pull-request-number is omitted, the pull request for the current branch is us
 				logger.Info("Requesting a Copilot review", "pr", pr.GetNumber(), "reason", reason)
 			}
 
+			if effort != "" {
+				if _, err := gh.RequestCopilotCodeReview(ctx, client, repository, pr, effort); err != nil {
+					return fmt.Errorf("failed to request a Copilot review with %s effort on pull request #%d: %w", effort, pr.GetNumber(), err)
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "Requested a Copilot review with %s effort on pull request #%d\n", effort, pr.GetNumber())
+				return nil
+			}
+
 			reviewersRequest := gh.ReviewersRequest{Reviewers: []string{copilot.ReviewerLogin}}
 			if _, err := gh.RequestPullRequestReviewers(ctx, client, repository, pr, reviewersRequest); err != nil {
 				return fmt.Errorf("failed to request a Copilot review on pull request #%d: %w", pr.GetNumber(), err)
@@ -88,6 +102,8 @@ If pull-request-number is omitted, the pull request for the current branch is us
 	f := cmd.Flags()
 	f.StringVarP(&repo, "repo", "R", "", "Repository in the format 'owner/repo'")
 	f.BoolVar(&force, "force", false, "Request a review even when the latest commit has already been reviewed")
+	f.StringVarP(&effort, "effort", "e", "", "Review effort level for this review (e.g. lite, balanced, max)")
+	_ = cmd.RegisterFlagCompletionFunc("effort", cobra.FixedCompletions(gh.CopilotCodeReviewEfforts, cobra.ShellCompDirectiveNoFileComp))
 
 	return cmd
 }

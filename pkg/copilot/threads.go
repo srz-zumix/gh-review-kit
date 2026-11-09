@@ -18,6 +18,12 @@ type ListOptions struct {
 	IncludeResolved bool
 	// IncludeOutdated includes comments whose review thread is outdated.
 	IncludeOutdated bool
+	// WithAttribution fetches the Copilot code review attribution fields
+	// (IsCopilotCodeReview and Sources) with an additional REST request.
+	WithAttribution bool
+	// Sources keeps only comments matching at least one filter. Setting it
+	// implies WithAttribution.
+	Sources []SourceFilter
 }
 
 // ListComments lists Copilot review comments for a pull request, filtered by
@@ -61,7 +67,15 @@ func ListComments(ctx context.Context, g *gh.GitHubClient, repo repository.Repos
 			})
 		}
 	}
-	return comments, nil
+	if !opts.WithAttribution && len(opts.Sources) == 0 {
+		return comments, nil
+	}
+	attributed, err := gh.ListPullRequestReviewCommentsWithCopilotAttribution(ctx, g, repo, pull_request)
+	if err != nil {
+		return nil, err
+	}
+	attachAttribution(comments, attributed)
+	return FilterCommentsBySource(comments, opts.Sources), nil
 }
 
 // FindComment locates a Copilot comment by its comment ID within a pull request's
