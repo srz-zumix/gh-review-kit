@@ -998,6 +998,8 @@ The reported status is one of `not_requested`, `in_progress`, `commented`, `appr
 
 `head_reviewed` tells whether Copilot reviewed the latest commit of the pull request. A `false` means every review it submitted predates the newest push, so the current code has not been reviewed yet.
 
+**Aliases:** `st`
+
 ```bash
 gh review-kit copilot status [pull-request-number] [flags]
 ```

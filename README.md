@@ -195,7 +195,7 @@ gh review-kit copilot status [PR_NUMBER] [flags]
 
 Check whether Copilot has reviewed the latest commit or is still reviewing, and
 which review effort it used; optionally export JSON. Omitting the number uses
-the current branch's PR.
+the current branch's PR. The alias `st` can be used in place of `status`.
 
 ### insights
 
