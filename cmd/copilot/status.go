@@ -20,8 +20,9 @@ func NewStatusCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "status [pull-request-number]",
-		Short: "Show the GitHub Copilot code review status of a pull request",
+		Use:     "status [pull-request-number]",
+		Aliases: []string{"st"},
+		Short:   "Show the GitHub Copilot code review status of a pull request",
 		Long: `Show where GitHub Copilot's code review of a pull request stands.
 
 The reported status is one of:
