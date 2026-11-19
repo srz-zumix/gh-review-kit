@@ -36,6 +36,9 @@ accepted, and it sets the organization's default review effort.
 keeps every comment, low leaves out low-severity comments, and low_and_medium
 leaves out low- and medium-severity comments.
 
+Pass --effort adaptive to let Copilot choose the review effort for each pull
+request based on its complexity and risk.
+
 Pass --effort inherit to clear the configured value and fall back to the
 inherited default. The updated settings are printed after the change.
 
@@ -94,13 +97,12 @@ GitHub App and fine-grained tokens are not supported.`,
 
 	f := cmd.Flags()
 	f.BoolVar(&customInstructions, "custom-instructions", false, "Use repository custom instructions in Copilot code review")
-	f.StringVarP(&effort, "effort", "e", "", "Review effort (e.g. lite, balanced, max), or 'inherit' to clear it")
+	cmdutil.StringEnumFlag(cmd, &effort, "effort", "e", "", append(append([]string{}, gh.CopilotCodeReviewEfforts...), gh.CopilotCodeReviewEffortInherit), "Review effort, or 'inherit' to clear it")
 	f.BoolVar(&mcp, "mcp", false, "Use MCP servers in Copilot code review")
 	f.StringVar(&org, "org", "", "Organization in the format '[HOST/]ORG'")
 	f.StringVarP(&repo, "repo", "R", "", "Repository in the format 'owner/repo'")
 	f.StringVar(&severityFilter, "severity-filter", "", "Comment severities to leave out: no_filter, low, low_and_medium")
 	cmd.MarkFlagsMutuallyExclusive("org", "repo")
-	_ = cmd.RegisterFlagCompletionFunc("effort", cobra.FixedCompletions(append(append([]string{}, gh.CopilotCodeReviewEfforts...), gh.CopilotCodeReviewEffortInherit), cobra.ShellCompDirectiveNoFileComp))
 	_ = cmd.RegisterFlagCompletionFunc("severity-filter", cobra.FixedCompletions(gh.CopilotCodeReviewSeverityFilters, cobra.ShellCompDirectiveNoFileComp))
 	cmdutil.AddFormatFlags(cmd, &opts.Exporter)
 

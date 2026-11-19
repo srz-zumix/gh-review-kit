@@ -163,8 +163,8 @@ gh review-kit copilot review-request [PR_NUMBER] [flags]
 ```
 
 Request a review of the latest commit, optionally forcing a repeat request.
-Use `--effort`/`-e` (for example `lite`, `balanced`, or `max`) to pick the
-review effort; without it the configured default applies. Omitting the number
+Use `--effort`/`-e` (for example `adaptive`, `lite`, `balanced`, or `max`) to
+pick the review effort; without it the configured default applies. Omitting the number
 uses the current branch's PR.
 
 #### Resolve review threads
