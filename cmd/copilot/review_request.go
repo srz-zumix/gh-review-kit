@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cli/cli/v2/pkg/cmdutil"
 	"github.com/spf13/cobra"
 	"github.com/srz-zumix/gh-review-kit/pkg/copilot"
 	"github.com/srz-zumix/go-gh-extension/pkg/gh"
@@ -40,7 +41,9 @@ status check entirely, so a review is requested even on a merged or closed
 pull request.
 
 Use --effort to choose the review effort level (for example lite, balanced, or
-max) for this review. The request is then sent through the Copilot code review
+max) for this review. Use --effort adaptive to let Copilot pick lite, balanced,
+or max based on the complexity and risk of the pull request, never above the
+configured maximum. The request is then sent through the Copilot code review
 API, which accepts only the effort levels available to you on the repository.
 Without --effort the review uses the default effort level.
 
@@ -102,8 +105,7 @@ If pull-request-number is omitted, the pull request for the current branch is us
 	f := cmd.Flags()
 	f.StringVarP(&repo, "repo", "R", "", "Repository in the format 'owner/repo'")
 	f.BoolVar(&force, "force", false, "Request a review even when the latest commit has already been reviewed")
-	f.StringVarP(&effort, "effort", "e", "", "Review effort level for this review (e.g. lite, balanced, max)")
-	_ = cmd.RegisterFlagCompletionFunc("effort", cobra.FixedCompletions(gh.CopilotCodeReviewEfforts, cobra.ShellCompDirectiveNoFileComp))
+	cmdutil.StringEnumFlag(cmd, &effort, "effort", "e", "", gh.CopilotCodeReviewEfforts, "Review effort level for this review")
 
 	return cmd
 }

@@ -550,13 +550,13 @@ Request a code review from GitHub Copilot on a pull request, the same as request
 
 Use `--force` to request a review regardless of that state. `--force` skips the status check entirely, so a review is requested even on a merged or closed pull request.
 
-Use `--effort` to choose Copilot's [review effort level](https://docs.github.com/en/copilot/concepts/agents/code-review#review-effort-level) (for example `lite`, `balanced`, or `max`) for this review. The request is then sent through the Copilot code review API (`POST /repos/{owner}/{repo}/pulls/{pull_number}/copilot-code-review`), which accepts only the effort levels available on the repository (see `copilot settings view`) and rejects a request while another Copilot review request is pending. Without `--effort`, Copilot is added as a requested reviewer and the configured default effort level is used.
+Use `--effort` to choose Copilot's [review effort level](https://docs.github.com/en/copilot/concepts/agents/code-review#review-effort-level) (for example `lite`, `balanced`, or `max`) for this review. Use `--effort adaptive` to let Copilot pick `lite`, `balanced`, or `max` based on the complexity and risk of the pull request, never above the configured maximum (public preview). The request is then sent through the Copilot code review API (`POST /repos/{owner}/{repo}/pulls/{pull_number}/copilot-code-review`), which accepts only the effort levels available on the repository (see `copilot settings view`) and rejects a request while another Copilot review request is pending. Without `--effort`, Copilot is added as a requested reviewer and the configured default effort level is used.
 
 **Aliases:** `rr`
 
 **Options:**
 
-- `--effort, -e`: Review effort level for this review, e.g. `lite`, `balanced`, `max` (optional, default: the configured default effort level)
+- `--effort, -e`: Review effort level for this review: `adaptive`, `lite`, `balanced`, `max` (optional, default: the configured default effort level)
 - `--force`: Request a review even when the latest commit has already been reviewed (optional, default: false)
 - `--repo, -R`: Repository in the format 'owner/repo' (optional, defaults to current repository)
 
@@ -574,6 +574,9 @@ gh review-kit copilot review-request --force
 
 # Request a thorough review with the max effort level
 gh review-kit copilot review-request 123 --effort max
+
+# Let Copilot choose the review effort based on the pull request's complexity and risk
+gh review-kit copilot review-request 123 --effort adaptive
 ```
 
 #### Change GitHub Copilot code review settings of a repository or organization
@@ -582,7 +585,7 @@ gh review-kit copilot review-request 123 --effort max
 gh review-kit copilot settings set [--repo REPO | --org ORG] [--effort EFFORT] [--severity-filter FILTER] [--custom-instructions[=true|false]] [--mcp[=true|false]] [--format json]
 ```
 
-Change the Copilot code review settings of a repository or an organization. Only the flags you pass are changed, and at least one is required. For a repository you can set `--effort`, `--severity-filter`, `--custom-instructions`, and `--mcp`. With `--org` only `--effort` is accepted, and it sets the organization's default review effort. Pass `--effort inherit` to clear the configured value and fall back to the inherited default. The updated settings are printed.
+Change the Copilot code review settings of a repository or an organization. Only the flags you pass are changed, and at least one is required. For a repository you can set `--effort`, `--severity-filter`, `--custom-instructions`, and `--mcp`. With `--org` only `--effort` is accepted, and it sets the organization's default review effort. Pass `--effort adaptive` to let Copilot choose the review effort for each pull request based on its complexity and risk. Pass `--effort inherit` to clear the configured value and fall back to the inherited default. The updated settings are printed.
 
 `--severity-filter` chooses which comment severities Copilot leaves out: `no_filter` keeps every comment, `low` leaves out low-severity comments, and `low_and_medium` leaves out low- and medium-severity comments.
 
@@ -591,7 +594,7 @@ Repository settings need the Administration permission (write) on the repository
 **Options:**
 
 - `--custom-instructions`: Use repository custom instructions in Copilot code review (optional, default: unchanged)
-- `--effort, -e`: Review effort, e.g. `lite`, `balanced`, `max`, or `inherit` to clear it (optional, default: unchanged)
+- `--effort, -e`: Review effort: `adaptive`, `lite`, `balanced`, `max`, or `inherit` to clear it (optional, default: unchanged)
 - `--format`: Output format: `json` (optional; omit for text output)
 - `--mcp`: Use MCP servers in Copilot code review (optional, default: unchanged)
 - `--org`: Organization in the format '[HOST/]ORG' (optional, mutually exclusive with `--repo`)
@@ -603,6 +606,9 @@ Repository settings need the Administration permission (write) on the repository
 ```sh
 # Use the max review effort on the current repository
 gh review-kit copilot settings set --effort max
+
+# Let Copilot choose the review effort for each pull request
+gh review-kit copilot settings set --effort adaptive
 
 # Leave out low-severity comments and stop using MCP servers
 gh review-kit copilot settings set --repo owner/repo --severity-filter low --mcp=false
